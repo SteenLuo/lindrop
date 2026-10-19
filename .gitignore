@@ -1,0 +1,38 @@
+# Build outputs
+*.exe
+*.test
+*.zip
+/dist/
+/coverage.out
+
+# Local configuration, identities, sessions and diagnostics
+settings.json
+settings.tmp
+phone.bmp
+control.json
+current-node.json
+*-startup.json
+*.log
+*.err
+*.pem
+*.key
+.env
+.env.*
+.ui-assets/
+text-outbox/
+LinDropNode/
+LinDrop/
+.邻传未完成/
+/state/
+/state-*/
+/receive/
+/receive-*/
+/backups/
+/work/
+/.superpowers/
+
+# Editors and operating system
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store

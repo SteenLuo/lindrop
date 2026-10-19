@@ -1,0 +1,41 @@
+name: Windows build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      GOOS: windows
+      GOARCH: '386'
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.20.14'
+          cache: false
+      - name: Test and build
+        shell: pwsh
+        run: ./build.ps1
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist/LinDrop-0.7.1-windows-x86 | Out-Null
+          Copy-Item -LiteralPath '邻传.exe','LICENSE','THIRD_PARTY_LICENSE.txt','GO-LICENSE.txt','SHA256-JS-LICENSE.txt' -Destination dist/LinDrop-0.7.1-windows-x86
+          Copy-Item -LiteralPath docs/usage.txt -Destination dist/LinDrop-0.7.1-windows-x86/使用说明.txt
+          Copy-Item -LiteralPath docs/verification.txt -Destination dist/LinDrop-0.7.1-windows-x86/验证说明.txt
+          Get-ChildItem dist/LinDrop-0.7.1-windows-x86 -File | Where-Object Name -ne SHA256.txt | ForEach-Object { '{0}  {1}' -f (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash,$_.Name } | Set-Content -Encoding utf8 dist/LinDrop-0.7.1-windows-x86/SHA256.txt
+          Compress-Archive -Path dist/LinDrop-0.7.1-windows-x86 -DestinationPath dist/LinDrop-0.7.1-windows-x86.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LinDrop-0.7.1-windows-x86
+          path: dist/LinDrop-0.7.1-windows-x86.zip
