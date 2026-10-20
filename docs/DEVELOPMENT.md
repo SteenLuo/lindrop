@@ -2,7 +2,7 @@
 
 ## 环境
 
-- Windows，Go 1.20.14，`GOARCH=386`，`CGO_ENABLED=0`。
+- Windows，Go 1.20.14，`GOARCH=386`或`amd64`，`CGO_ENABLED=0`。
 - `build.ps1` 在项目目录先测试再构建GUI程序。
 - 默认测试含回环网络和原生Windows API检查，应在Windows执行；两个需交互的窗口夹具默认跳过。
 - 修改浏览器代码后仍需在目标手机浏览器验证，不能把单机测试当作安卓真机验收。
@@ -13,6 +13,7 @@
 | --- | --- |
 | `model.go` | 配置、持久身份、设备视图和任务 |
 | `link.go` | 双向TLS连接、路由与RPC |
+| `link_binary.go`、`transfer_rate.go` | 直接TLS对端协商二进制文件块、签名摘要验证、有限长度帧和速度窗口；未协商或中转走旧路径 |
 | `transfer.go`、`text.go` | 文件分块/校验/续传、文字收发 |
 | `server.go`、`web/` | HTTP手机入口、发现和网页会话 |
 | `desktop_*_windows.go` | 原生窗口、气泡、媒体、拖放、提醒 |
@@ -39,6 +40,7 @@
 
 ```powershell
 go run github.com/akavel/rsrc@v0.10.2 -arch 386 -manifest app.manifest -ico icon.ico -o rsrc_windows_386.syso
+go run github.com/akavel/rsrc@v0.10.2 -arch amd64 -manifest app.manifest -ico icon.ico -o rsrc_windows_amd64.syso
 ```
 
 随后完整构建并运行 `TestDesktopEmbeddedIcons`。资源编译工具仅用于开发，不链接进客户端。当前图标组编号为2，修改生成方式时须同步检查实际图标加载。
@@ -49,6 +51,6 @@ go run github.com/akavel/rsrc@v0.10.2 -arch 386 -manifest app.manifest -ico icon
 
 AppData可能受打包开发工具的进程环境影响：即使环境变量和 `-state-dir` 字符串相同，物理文件也可能不同。最终必须从资源管理器双击交付的EXE，检查原名称、接收目录、历史、设备连接，正常退出重开验证。开发启动日志的管理凭证不适用于后续用户启动的进程。
 
-仓库工作流在Windows运行测试并构建32位GUI程序，上传构建产物供检查。Release附件应只包含程序、说明、许可证和校验值；工作流不自动公开发布Release。
+仓库工作流在Windows分别测试并构建x86与x64 GUI程序，上传构建产物供检查。`build.ps1`默认386，使用`-Architecture amd64`生成64位程序。Release附件应只包含程序、说明、许可证和校验值；工作流不自动公开发布Release。
 
 需要避免占用使用者前台时，完整原生回归放在GitHub Windows runner执行，本地只构建。不要启动可见测试窗口或操作使用者鼠标键盘；交互验收需另行安排。测试数据始终与真实节点隔离。

@@ -322,3 +322,61 @@ func TestSelectionAcrossExpandedMessageRows(t *testing.T) {
 		t.Fatal("expanded selection created child editor")
 	}
 }
+
+func TestProgressRefreshKeepsViewportAndUnchangedRows(t *testing.T) {
+	h, v := viewportTestWindow(t)
+	oldSelected, oldLast, oldDevice, oldLayout := guiSelected, guiLastTasks, chatLastDevice, chatLayoutWidth
+	defer func() {
+		guiSelected, guiLastTasks, chatLastDevice, chatLayoutWidth = oldSelected, oldLast, oldDevice, oldLayout
+	}()
+	guiSelected, guiLastTasks = "peer", ""
+	all := append([]Task(nil), guiTasks...)
+	for i := range all {
+		all[i].Sender, all[i].Target = "peer", "self"
+	}
+	all[5].Kind, all[5].Media = "", "file"
+	all[5].Status, all[5].Title, all[5].Total = "sending", "large.bin", 5*1024*1024*1024
+	if !refreshChatList(all) {
+		t.Fatal("initial structure was not built")
+	}
+	v.scroll(h, 73, false)
+	initialWidth := chatClient(h).R
+	initialHeight := &v.Heights[0]
+	chatSelection = chatSelectionState{ID: all[0].ID, Anchor: 0, Caret: 2}
+	// Zero-sized cache sentinels let us observe invalidation without drawing.
+	keep, changed := &chatRowRaster{}, &chatRowRaster{}
+	v.Rows[0], v.Rows[5] = keep, changed
+	for i := 0; i < 60; i++ {
+		all[5].Done += 1024 * 1024
+		all[5].Rate = float64((i + 1) * 1024 * 1024)
+		if refreshChatList(all) {
+			t.Fatal("progress requested a layout rebuild")
+		}
+		if &v.Heights[0] != initialHeight || chatClient(h).R != initialWidth || v.Y != 73 {
+			t.Fatal("progress changed viewport geometry", v.Y)
+		}
+		if v.Rows[0] != keep || v.Rows[5] != nil {
+			t.Fatal("progress invalidated unrelated cache or kept stale row")
+		}
+		if chatSelection.ID != all[0].ID || chatSelection.Caret != 2 {
+			t.Fatal("selection lost on progress")
+		}
+	}
+	if guiTasks[5].Done != all[5].Done {
+		t.Fatal("displayed task snapshot was not updated")
+	}
+	// Resetting content under WM_SETREDRAW must not hide and re-show the bar.
+	msg(h, 0xb, 0, 0)
+	msg(h, 0x184, 0, 0)
+	msg(h, 0x197, 0, 0)
+	if chatClient(h).R != initialWidth {
+		t.Fatal("disabled redraw toggled scrollbar gutter")
+	}
+	for range guiTasks {
+		msg(h, 0x180, 0, 0)
+	}
+	msg(h, 0xb, 1, 0)
+	if chatClient(h).R != initialWidth {
+		t.Fatal("rebuilt rows changed scrollbar gutter")
+	}
+}

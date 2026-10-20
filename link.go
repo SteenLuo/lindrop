@@ -20,6 +20,7 @@ import (
 )
 
 type Envelope struct {
+	Binary    []byte          `json:"-"`
 	ID        string          `json:"id"`
 	Origin    string          `json:"origin"`
 	Pub       []byte          `json:"pub"`
@@ -39,28 +40,33 @@ type Frame struct {
 	Routes  []Route         `json:"routes,omitempty"`
 }
 type Hello struct {
-	ID    string
-	Name  string
-	Addr  string
-	Code  string
-	Nonce string
-	Error string
+	BinaryChunks bool
+	ID           string
+	Name         string
+	Addr         string
+	Code         string
+	Nonce        string
+	Error        string
 }
 type Link struct {
-	n       *Node
-	conn    net.Conn
-	peer    Peer
-	key     string
-	routes  []Route
-	writeMu sync.Mutex
-	mu      sync.Mutex
-	pending map[string]chan Frame
-	done    chan struct{}
-	once    sync.Once
-	slots   chan struct{}
+	binaryChunks bool
+	n            *Node
+	conn         net.Conn
+	peer         Peer
+	key          string
+	routes       []Route
+	writeMu      sync.Mutex
+	mu           sync.Mutex
+	pending      map[string]chan Frame
+	done         chan struct{}
+	once         sync.Once
+	slots        chan struct{}
 }
 
 func writePacket(w io.Writer, v interface{}) error {
+	if f, ok := v.(Frame); ok && f.Request != nil && f.Request.Binary != nil {
+		return writeBinaryPacket(w, f)
+	}
 	raw, e := json.Marshal(v)
 	if e != nil {
 		return e
@@ -82,6 +88,9 @@ func readPacket(r io.Reader, v interface{}) error {
 		return e
 	}
 	n := binary.BigEndian.Uint32(size[:])
+	if n&binaryPacketFlag != 0 {
+		return readBinaryPacket(r, n&^binaryPacketFlag, v)
+	}
 	if n == 0 || n > 2*1024*1024 {
 		return errors.New("消息长度无效")
 	}
@@ -119,7 +128,11 @@ func (l *Link) call(e *Envelope) (json.RawMessage, error) {
 		l.close()
 		return nil, err
 	}
-	timer := time.NewTimer(45 * time.Second)
+	timeout := 45 * time.Second
+	if e.Method == "finish" {
+		timeout = 30 * time.Minute
+	}
+	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
 	case f := <-ch:
@@ -169,6 +182,10 @@ func (l *Link) run() {
 			if f.Request == nil {
 				continue
 			}
+			if f.Request.Binary != nil && (!l.binaryChunks || f.Request.Origin != l.peer.ID || f.Request.Target != l.n.id) {
+				l.send(Frame{Kind: "response", ID: f.ID, Error: "二进制块必须来自协商过的直接设备"})
+				continue
+			}
 			select {
 			case l.slots <- struct{}{}:
 			default:
@@ -187,8 +204,8 @@ func (l *Link) run() {
 		}
 	}
 }
-func (n *Node) attach(conn net.Conn, peer Peer, key string) {
-	l := &Link{n: n, conn: conn, peer: peer, key: key, pending: map[string]chan Frame{}, done: make(chan struct{}), slots: make(chan struct{}, 16)}
+func (n *Node) attach(conn net.Conn, peer Peer, key string, binaryChunks bool) {
+	l := &Link{n: n, conn: conn, peer: peer, key: key, binaryChunks: binaryChunks, pending: map[string]chan Frame{}, done: make(chan struct{}), slots: make(chan struct{}, 16)}
 	n.mu.Lock()
 	select {
 	case <-n.stop:
@@ -289,7 +306,7 @@ func (n *Node) dialExpected(addr, code, expectedID string) error {
 		return e
 	}
 	targetID := certID(tc.ConnectionState().PeerCertificates[0])
-	hello := Hello{ID: n.id, Name: n.name(), Addr: n.addr, Code: code, Nonce: rid(16)}
+	hello := Hello{ID: n.id, Name: n.name(), Addr: n.addr, Code: code, Nonce: rid(16), BinaryChunks: true}
 	if e = writePacket(tc, hello); e != nil {
 		return e
 	}
@@ -305,7 +322,7 @@ func (n *Node) dialExpected(addr, code, expectedID string) error {
 	}
 	tc.SetDeadline(time.Time{})
 	ok = true
-	n.attach(tc, Peer{targetID, reply.Name, addr}, hello.Nonce)
+	n.attach(tc, Peer{targetID, reply.Name, addr}, hello.Nonce, reply.BinaryChunks)
 	return nil
 }
 func (n *Node) acceptLink(w http.ResponseWriter, r *http.Request) {
@@ -353,12 +370,12 @@ func (n *Node) acceptLink(w http.ResponseWriter, r *http.Request) {
 		if !privateAddr(peerAddr) {
 			peerAddr = ""
 		}
-		if writePacket(tc, Hello{ID: n.id, Name: n.name(), Addr: n.addr}) != nil {
+		if writePacket(tc, Hello{ID: n.id, Name: n.name(), Addr: n.addr, BinaryChunks: true}) != nil {
 			return
 		}
 		tc.SetDeadline(time.Time{})
 		ok = true
-		n.attach(tc, Peer{peerID, hello.Name, peerAddr}, hello.Nonce)
+		n.attach(tc, Peer{peerID, hello.Name, peerAddr}, hello.Nonce, hello.BinaryChunks)
 	}()
 }
 func signatureBody(e *Envelope) []byte {
@@ -388,6 +405,9 @@ func (n *Node) Call(target, method string, data interface{}, out interface{}) er
 	return json.Unmarshal(result, out)
 }
 func (n *Node) forward(e *Envelope) (json.RawMessage, error) {
+	if e.Binary != nil && e.Target != n.id {
+		return nil, errors.New("二进制块不经中转，请使用兼容路径")
+	}
 	if len(e.Visited) > 7 || contains(e.Visited, n.id) {
 		return nil, errors.New("中转路径循环或过长")
 	}

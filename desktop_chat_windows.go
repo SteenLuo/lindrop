@@ -629,7 +629,8 @@ func trackChatHover(hwnd uintptr, l uintptr) {
 		Size, Flags uint32
 		Hwnd        uintptr
 		Hover       uint32
-	}{16, 2, hwnd, 0}
+	}{Flags: 2, Hwnd: hwnd}
+	track.Size = uint32(unsafe.Sizeof(track))
 	call(user.NewProc("TrackMouseEvent"), uintptr(unsafe.Pointer(&track)))
 }
 
@@ -653,8 +654,16 @@ func toggleChatText() {
 
 func refreshChatList(all []Task) bool {
 	tasks := conversationTasks(all, guiNode.id, guiSelected)
-	raw := fmt.Sprintf("%s:%d:%v", guiSelected, chatListWidth(), tasks)
+	// Byte counts and sampled rates change continuously, but do not change
+	// geometry. Keep row caches, selection and pixel scroll position intact.
+	structure := make([]Task, len(tasks))
+	copy(structure, tasks)
+	for i := range structure {
+		structure[i].Done, structure[i].Rate = 0, 0
+	}
+	raw := fmt.Sprintf("%s:%d:%g:%v", guiSelected, chatListWidth(), guiScale, structure)
 	if raw == guiLastTasks {
+		refreshChatProgress(tasks)
 		return false
 	}
 	h := guiControls[126]
@@ -725,6 +734,34 @@ func refreshChatList(all []Task) bool {
 		}
 	}
 	return true
+}
+
+func refreshChatProgress(tasks []Task) {
+	byID := make(map[string]Task, len(tasks))
+	for _, t := range tasks {
+		byID[t.ID] = t
+	}
+	h := guiControls[126]
+	for i, old := range guiTasks {
+		t, ok := byID[old.ID]
+		if !ok {
+			continue
+		}
+		guiTasks[i] = t
+		if old.Done == t.Done && old.Rate == t.Rate {
+			continue
+		}
+		if part := chatPartAt(i); part != nil && !part.Last {
+			continue
+		}
+		if v := chatViews[h]; v != nil {
+			v.dropRow(i)
+		}
+		var r rect
+		if int32(msg(h, 0x198, uintptr(i), uintptr(unsafe.Pointer(&r)))) != -1 {
+			call(user.NewProc("InvalidateRect"), h, uintptr(unsafe.Pointer(&r)), 0)
+		}
+	}
 }
 
 func scrollChatBottom() {

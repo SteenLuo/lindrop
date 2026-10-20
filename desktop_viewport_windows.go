@@ -95,7 +95,7 @@ func (v *chatViewport) scrollbar(h uintptr) {
 		Min, Max   int32
 		Page       uint32
 		Pos, Track int32
-	}{Size: 28, Mask: 7, Max: int32(v.Tops[len(v.Heights)] + sc(12) - 1), Page: uint32(r.B), Pos: int32(math.Round(v.Y))}
+	}{Size: 28, Mask: 7 | 8, Max: int32(v.Tops[len(v.Heights)] + sc(12) - 1), Page: uint32(r.B), Pos: int32(math.Round(v.Y))}
 	call(user.NewProc("SetScrollInfo"), h, 1, uintptr(unsafe.Pointer(&si)), 1)
 }
 func (v *chatViewport) scroll(h uintptr, y float64, animated bool) {
@@ -113,8 +113,8 @@ func (v *chatViewport) scroll(h uintptr, y float64, animated bool) {
 		v.Started = time.Time{}
 		call(user.NewProc("KillTimer"), h, chatScrollTimer)
 	}
-	v.scrollbar(h)
 	if v.Redraw {
+		v.scrollbar(h)
 		invalidate(h)
 	}
 }

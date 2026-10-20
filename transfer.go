@@ -53,6 +53,8 @@ func (n *Node) handle(e *Envelope) (json.RawMessage, error) {
 		return nil, errors.New("网页设备通过页面收发，不提供节点共享接口")
 	}
 	switch e.Method {
+	case "chunk.binary":
+		return n.receiveBinaryChunk(e)
 	case "phone.names":
 		return marshal(n.localPhoneNames())
 	case "text.read":
@@ -351,7 +353,11 @@ func (n *Node) acceptLocked(id string, trust bool) error {
 	return n.persist()
 }
 func (n *Node) chunk(owner string, v Chunk) (json.RawMessage, error) {
-	if len(v.Data) > chunkSize || v.Offset < 0 {
+	return n.chunkWithLimit(owner, v, chunkSize)
+}
+
+func (n *Node) chunkWithLimit(owner string, v Chunk, limit int) (json.RawMessage, error) {
+	if len(v.Data) > limit || v.Offset < 0 {
 		return nil, errors.New("文件块无效")
 	}
 	lock := n.taskLock(v.ID)
@@ -385,7 +391,10 @@ func (n *Node) chunk(owner string, v Chunk) (json.RawMessage, error) {
 		return nil, e
 	}
 	_, e = out.WriteAt(v.Data, v.Offset)
-	if e == nil {
+	// Acknowledge OS-cache writes between checkpoints; force durability every
+	// 8 MiB and at EOF, rather than stalling the network on every 256 KiB.
+	next := v.Offset + int64(len(v.Data))
+	if e == nil && (next == f.Size || v.Offset/(8*1024*1024) != next/(8*1024*1024)) {
 		e = out.Sync()
 	}
 	closeE := out.Close()
@@ -440,6 +449,18 @@ func (n *Node) finish(owner, id string) (json.RawMessage, error) {
 				return nil, e
 			}
 			file.Close()
+		}
+		stable, e := os.OpenFile(f.Temp, os.O_WRONLY, 0600)
+		if e != nil {
+			return nil, e
+		}
+		e = stable.Sync()
+		closeErr := stable.Close()
+		if e == nil {
+			e = closeErr
+		}
+		if e != nil {
+			return nil, e
 		}
 		hash, e := shaFile(f.Temp)
 		if e != nil {
@@ -616,6 +637,11 @@ func (n *Node) sendTask(id string) error {
 	if len(reply.Offsets) != len(files) {
 		return errors.New("接收进度格式错误")
 	}
+	for i, off := range reply.Offsets {
+		if off < 0 || off > files[i].Size {
+			return errors.New("接收进度超出文件范围")
+		}
+	}
 	n.mu.Lock()
 	t.Status = "sending"
 	t.Error = ""
@@ -636,6 +662,12 @@ func (n *Node) sendTask(id string) error {
 			return errors.New("源文件已改变，请重新添加")
 		}
 		offset := reply.Offsets[i]
+		fast := t.Kind != "text" && n.binaryLink(target) != nil
+		blockSize := chunkSize
+		if fast {
+			blockSize = binaryChunkSize
+		}
+		meter := transferRate{Started: time.Now()}
 		for offset < f.Size {
 			n.mu.Lock()
 			paused := t.Manual
@@ -650,7 +682,7 @@ func (n *Node) sendTask(id string) error {
 				return errors.New("程序正在退出")
 			default:
 			}
-			count := int64(chunkSize)
+			count := int64(blockSize)
 			if count > f.Size-offset {
 				count = f.Size - offset
 			}
@@ -659,11 +691,15 @@ func (n *Node) sendTask(id string) error {
 				src.Close()
 				return e
 			}
-			start := time.Now()
 			var ack struct {
 				Offset int64 `json:"offset"`
 			}
-			if e = n.Call(target, "chunk", Chunk{id, i, offset, data}, &ack); e != nil {
+			if fast {
+				e = n.sendBinaryChunk(target, Chunk{id, i, offset, data}, &ack)
+			} else {
+				e = n.Call(target, "chunk", Chunk{id, i, offset, data}, &ack)
+			}
+			if e != nil {
 				src.Close()
 				return e
 			}
@@ -674,7 +710,9 @@ func (n *Node) sendTask(id string) error {
 			n.mu.Lock()
 			t.Done += ack.Offset - offset
 			t.Files[i].Offset = ack.Offset
-			t.Rate = float64(ack.Offset-offset) / time.Since(start).Seconds()
+			if rate, ready := meter.add(ack.Offset-offset, time.Now()); ready {
+				t.Rate = rate
+			}
 			n.mu.Unlock()
 			offset = ack.Offset
 		}

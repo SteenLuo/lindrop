@@ -872,7 +872,8 @@ func buttonProc(hwnd uintptr, m uint32, w, l uintptr) uintptr {
 			Size, Flags uint32
 			Hwnd        uintptr
 			Hover       uint32
-		}{Size: 16, Flags: 2, Hwnd: hwnd}
+		}{Flags: 2, Hwnd: hwnd}
+		track.Size = uint32(unsafe.Sizeof(track))
 		call(user.NewProc("TrackMouseEvent"), uintptr(unsafe.Pointer(&track)))
 	}
 	if m == 0x2a3 {
