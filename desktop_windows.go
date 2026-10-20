@@ -607,21 +607,18 @@ func mainProc(hwnd uintptr, message uint32, w, l uintptr) uintptr {
 			call(user.NewProc("SetForegroundWindow"), hwnd)
 		}
 		if l == 0x205 {
-			menu := call(user.NewProc("CreatePopupMenu"))
-			call(user.NewProc("AppendMenuW"), menu, 0, 1001, uintptr(unsafe.Pointer(wp("打开邻传"))))
-			call(user.NewProc("AppendMenuW"), menu, 0, 1002, uintptr(unsafe.Pointer(wp("退出"))))
 			var pt point
 			call(user.NewProc("GetCursorPos"), uintptr(unsafe.Pointer(&pt)))
-			call(user.NewProc("SetForegroundWindow"), hwnd)
-			call(user.NewProc("TrackPopupMenu"), menu, 0x2, uintptr(pt.X), uintptr(pt.Y), 0, hwnd, 0)
-			call(user.NewProc("DestroyMenu"), menu)
+			showThemedContextMenu(hwnd, pt, []contextMenuItem{{1001, "打开邻传", ""}, {1002, "退出", ""}}, "")
 		}
 		return 0
 	case 0x10:
+		closeThemedContextMenu(false)
 		hideQR()
 		showWindow.Call(hwnd, 0)
 		return 0
 	case 0x2:
+		closeThemedContextMenu(false)
 		if guiTextWindow != 0 {
 			destroyWindow.Call(guiTextWindow)
 		}

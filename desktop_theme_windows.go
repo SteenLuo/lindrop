@@ -1091,6 +1091,11 @@ func runDesktop(n *Node) {
 		if message.Message == 0x100 {
 			guiKeyboardMode = true
 		}
+		if guiContextMenu != 0 && message.Hwnd == guiContextMenu {
+			call(user.NewProc("TranslateMessage"), uintptr(unsafe.Pointer(&message)))
+			call(user.NewProc("DispatchMessageW"), uintptr(unsafe.Pointer(&message)))
+			continue
+		}
 		if message.Message == 0x100 && message.WParam == 27 {
 			if guiTextWindow != 0 {
 				destroyWindow.Call(guiTextWindow)

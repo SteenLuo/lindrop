@@ -85,41 +85,35 @@ func taskContextMenu(hwnd uintptr) {
 	if !ok {
 		return
 	}
-	menu := call(user.NewProc("CreatePopupMenu"))
-	defer call(user.NewProc("DestroyMenu"), menu)
+	items := []contextMenuItem{}
 	locationAdded := false
 	if t.Kind != "text" && (t.Direction == "out" || t.Status == "done") {
-		call(user.NewProc("AppendMenuW"), menu, 0, 172, uintptr(unsafe.Pointer(wp("复制文件  Ctrl+C"))))
+		items = append(items, contextMenuItem{172, "复制文件", "Ctrl+C"})
 	}
 	if t.Kind == "text" && chatBody(t) != "" {
-		for _, v := range []struct {
-			id   int
-			name string
-		}{{172, "复制文字  Ctrl+C"}, {174, "全选此条文字"}, {173, "展开 / 收起"}} {
-			call(user.NewProc("AppendMenuW"), menu, 0, uintptr(v.id), uintptr(unsafe.Pointer(wp(v.name))))
-		}
+		items = append(items, contextMenuItem{172, "复制文字", "Ctrl+C"}, contextMenuItem{174, "全选此条文字", ""}, contextMenuItem{173, "展开 / 收起", ""})
 	} else if t.Status == "waiting" {
-		for _, v := range []struct {
-			id   int
-			name string
-		}{{127, "接收"}, {128, "接收并信任此设备"}, {129, "拒绝"}} {
-			call(user.NewProc("AppendMenuW"), menu, 0, uintptr(v.id), uintptr(unsafe.Pointer(wp(v.name))))
-		}
+		items = append(items, contextMenuItem{127, "接收", ""}, contextMenuItem{128, "接收并信任此设备", ""}, contextMenuItem{129, "拒绝", ""})
 	} else if id, name := taskAction(t); id != 0 {
 		if id == 153 {
 			name, locationAdded = "打开所在文件夹", true
 		}
-		call(user.NewProc("AppendMenuW"), menu, 0, uintptr(id), uintptr(unsafe.Pointer(wp(name))))
+		items = append(items, contextMenuItem{id, name, ""})
 	} else if t.Kind == "text" || (t.Direction != "out" && t.Status != "done") {
 		return
 	}
 	if !locationAdded && t.Kind != "text" && (t.Direction == "out" || t.Direction == "in" && t.Status == "done") {
-		call(user.NewProc("AppendMenuW"), menu, 0, 153, uintptr(unsafe.Pointer(wp("打开所在文件夹"))))
+		items = append(items, contextMenuItem{153, "打开所在文件夹", ""})
 	}
 	var p point
 	call(user.NewProc("GetCursorPos"), uintptr(unsafe.Pointer(&p)))
-	selected := call(user.NewProc("TrackPopupMenu"), menu, 0x102, uintptr(p.X), uintptr(p.Y), 0, hwnd, 0)
-	if selected != 0 {
-		doCommand(int(selected), 0)
+	if guiKeyboardMode {
+		i := msg(guiControls[126], 0x188, 0, 0)
+		var row rect
+		if int32(msg(guiControls[126], 0x198, i, uintptr(unsafe.Pointer(&row)))) != -1 {
+			p = point{row.L + int32(sc(32)), row.T + int32(sc(20))}
+			call(user.NewProc("ClientToScreen"), guiControls[126], uintptr(unsafe.Pointer(&p)))
+		}
 	}
+	showThemedContextMenu(hwnd, p, items, t.ID)
 }

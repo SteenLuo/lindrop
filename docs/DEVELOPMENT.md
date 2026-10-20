@@ -20,6 +20,7 @@
 | `desktop_*_windows.go` | 原生窗口、气泡、媒体、拖放、提醒 |
 | `desktop_viewport_windows.go` | 对话像素视口、滚轮动画、可见行绘制及32MiB行缓存；设备与共享列表仍为LISTBOX |
 | `desktop_selection_windows.go` | 气泡原位选字、原文字偏移映射、跨行及跨绘制段选择，不创建临时EDIT |
+| `desktop_context_windows.go`、`desktop_location_windows.go`、`task_location.go` | 消息及托盘主题菜单、键盘与焦点收起；按历史实际路径打开目录及Shell文件选中 |
 | `desktop_text_windows.go` | 保留抗锯齿文字绘制，24MiB文字位图缓存与释放 |
 | `notice_settings.go`、`phone_names.go` | 提醒开关、局域网登记名称查询 |
 | `assets/`、`icon.ico` | 界面图标 |
