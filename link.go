@@ -40,6 +40,7 @@ type Frame struct {
 	Routes  []Route         `json:"routes,omitempty"`
 }
 type Hello struct {
+	StreamHashes bool
 	BinaryChunks bool
 	ID           string
 	Name         string
@@ -49,6 +50,7 @@ type Hello struct {
 	Error        string
 }
 type Link struct {
+	streamHashes bool
 	binaryChunks bool
 	n            *Node
 	conn         net.Conn
@@ -204,8 +206,8 @@ func (l *Link) run() {
 		}
 	}
 }
-func (n *Node) attach(conn net.Conn, peer Peer, key string, binaryChunks bool) {
-	l := &Link{n: n, conn: conn, peer: peer, key: key, binaryChunks: binaryChunks, pending: map[string]chan Frame{}, done: make(chan struct{}), slots: make(chan struct{}, 16)}
+func (n *Node) attach(conn net.Conn, peer Peer, key string, binaryChunks, streamHashes bool) {
+	l := &Link{n: n, conn: conn, peer: peer, key: key, binaryChunks: binaryChunks, streamHashes: streamHashes, pending: map[string]chan Frame{}, done: make(chan struct{}), slots: make(chan struct{}, 16)}
 	n.mu.Lock()
 	select {
 	case <-n.stop:
@@ -306,7 +308,7 @@ func (n *Node) dialExpected(addr, code, expectedID string) error {
 		return e
 	}
 	targetID := certID(tc.ConnectionState().PeerCertificates[0])
-	hello := Hello{ID: n.id, Name: n.name(), Addr: n.addr, Code: code, Nonce: rid(16), BinaryChunks: true}
+	hello := Hello{ID: n.id, Name: n.name(), Addr: n.addr, Code: code, Nonce: rid(16), BinaryChunks: true, StreamHashes: true}
 	if e = writePacket(tc, hello); e != nil {
 		return e
 	}
@@ -322,7 +324,7 @@ func (n *Node) dialExpected(addr, code, expectedID string) error {
 	}
 	tc.SetDeadline(time.Time{})
 	ok = true
-	n.attach(tc, Peer{targetID, reply.Name, addr}, hello.Nonce, reply.BinaryChunks)
+	n.attach(tc, Peer{targetID, reply.Name, addr}, hello.Nonce, reply.BinaryChunks, reply.StreamHashes)
 	return nil
 }
 func (n *Node) acceptLink(w http.ResponseWriter, r *http.Request) {
@@ -370,12 +372,12 @@ func (n *Node) acceptLink(w http.ResponseWriter, r *http.Request) {
 		if !privateAddr(peerAddr) {
 			peerAddr = ""
 		}
-		if writePacket(tc, Hello{ID: n.id, Name: n.name(), Addr: n.addr, BinaryChunks: true}) != nil {
+		if writePacket(tc, Hello{ID: n.id, Name: n.name(), Addr: n.addr, BinaryChunks: true, StreamHashes: true}) != nil {
 			return
 		}
 		tc.SetDeadline(time.Time{})
 		ok = true
-		n.attach(tc, Peer{peerID, hello.Name, peerAddr}, hello.Nonce, hello.BinaryChunks)
+		n.attach(tc, Peer{peerID, hello.Name, peerAddr}, hello.Nonce, hello.BinaryChunks, hello.StreamHashes)
 	}()
 }
 func signatureBody(e *Envelope) []byte {

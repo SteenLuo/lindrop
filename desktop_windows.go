@@ -173,6 +173,9 @@ func showError(s string) {
 	user.NewProc("MessageBoxW").Call(guiMain, uintptr(unsafe.Pointer(wp(s))), uintptr(unsafe.Pointer(wp("邻传"))), 0x10)
 }
 func statusText(t Task) string {
+	if t.Status == "verifying" {
+		return "校验中 · " + formatSize(t.Done) + " / " + formatSize(t.Total)
+	}
 	names := map[string]string{"preparing": "校验源文件", "waiting": "待接收确认", "waiting_remote": "等待对方接收", "receiving": "接收中", "sending": "发送中", "paused": "已暂停", "queued": "等待继续", "done": "已完成", "rejected": "已拒绝", "browser": "等待手机下载", "waiting_browser": "等待手机点击下载"}
 	s := names[t.Status]
 	if s == "" {

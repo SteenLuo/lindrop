@@ -14,13 +14,14 @@ import (
 )
 
 type Offer struct {
-	Kind       string `json:"kind,omitempty"`
-	ID         string `json:"id"`
-	Sender     string `json:"sender"`
-	SenderName string `json:"senderName"`
-	Title      string `json:"title"`
-	Folder     bool   `json:"folder"`
-	Files      []Meta `json:"files"`
+	HashAtFinish bool   `json:"hashAtFinish,omitempty"`
+	Kind         string `json:"kind,omitempty"`
+	ID           string `json:"id"`
+	Sender       string `json:"sender"`
+	SenderName   string `json:"senderName"`
+	Title        string `json:"title"`
+	Folder       bool   `json:"folder"`
+	Files        []Meta `json:"files"`
 }
 type TaskReply struct {
 	Status  string  `json:"status"`
@@ -81,6 +82,9 @@ func (n *Node) handle(e *Envelope) (json.RawMessage, error) {
 		if err := json.Unmarshal(e.Data, &v); err != nil {
 			return nil, err
 		}
+		if v.HashAtFinish && (len(e.Visited) != 1 || e.Visited[0] != e.Origin) {
+			return nil, errors.New("免预扫描仅用于直接连接")
+		}
 		return n.offer(e.Origin, e.Target, v)
 	case "out.read":
 		var v ShareRequest
@@ -124,9 +128,11 @@ func (n *Node) handle(e *Envelope) (json.RawMessage, error) {
 		}
 		return n.chunk(e.Origin, v)
 	case "finish":
-		var v struct{ ID string }
-		json.Unmarshal(e.Data, &v)
-		return n.finish(e.Origin, v.ID)
+		var v FinishRequest
+		if err := json.Unmarshal(e.Data, &v); err != nil {
+			return nil, err
+		}
+		return n.finishWithHashes(e.Origin, v.ID, v.Hashes)
 	case "shares":
 		n.mu.Lock()
 		out := []Share{}
@@ -205,6 +211,9 @@ func (n *Node) replyLocked(t *Task) TaskReply {
 	return v
 }
 func (n *Node) offer(owner, target string, v Offer) (json.RawMessage, error) {
+	if v.HashAtFinish && (v.Kind != "" || target != n.id || !n.canStreamHashes(owner)) {
+		return nil, errors.New("免预扫描需要支持此功能的直接电脑连接")
+	}
 	if v.Kind != "" && v.Kind != "text" {
 		return nil, errors.New("不支持的传输类型")
 	}
@@ -265,7 +274,7 @@ func (n *Node) offer(owner, target string, v Offer) (json.RawMessage, error) {
 			return nil, errors.New("目录中存在重名文件")
 		}
 		seen[strings.ToLower(f.Rel)] = true
-		if f.Size < 0 || f.Size > maxFileSize || len(f.SHA) != 64 {
+		if f.Size < 0 || f.Size > maxFileSize || !(validFileSHA(f.SHA) || v.HashAtFinish && f.SHA == "") {
 			return nil, errors.New("文件大小或校验值无效")
 		}
 		if _, err = hex.DecodeString(f.SHA); err != nil {
@@ -282,7 +291,7 @@ func (n *Node) offer(owner, target string, v Offer) (json.RawMessage, error) {
 	if strings.HasPrefix(target, "web:"+n.id+":") {
 		direction, status = "web", "browser"
 	}
-	t := &Task{Kind: v.Kind, ID: v.ID, Direction: direction, Owner: owner, Sender: v.Sender, SenderName: v.SenderName, Target: target, TargetName: n.cfg.Name, Title: title, Folder: v.Folder, Files: files, Status: status, Total: total, Created: time.Now().Unix(), CreatedNS: time.Now().UnixNano()}
+	t := &Task{HashAtFinish: v.HashAtFinish, Kind: v.Kind, ID: v.ID, Direction: direction, Owner: owner, Sender: v.Sender, SenderName: v.SenderName, Target: target, TargetName: n.cfg.Name, Title: title, Folder: v.Folder, Files: files, Status: status, Total: total, Created: time.Now().Unix(), CreatedNS: time.Now().UnixNano()}
 	n.cfg.Tasks[t.ID] = t
 	trusted := n.cfg.Trust[v.Sender]
 	n.mu.Unlock()
@@ -414,9 +423,22 @@ func (n *Node) chunkWithLimit(owner string, v Chunk, limit int) (json.RawMessage
 	}{offset})
 }
 func (n *Node) finish(owner, id string) (json.RawMessage, error) {
+	return n.finishWithHashes(owner, id, nil)
+}
+
+func (n *Node) finishWithHashes(owner, id string, hashes []string) (result json.RawMessage, err error) {
 	lock := n.taskLock(id)
 	lock.Lock()
 	defer lock.Unlock()
+	defer func() {
+		if err != nil {
+			n.mu.Lock()
+			if t := n.cfg.Tasks[id]; t != nil && t.Status == "verifying" {
+				t.Status = "receiving"
+			}
+			n.mu.Unlock()
+		}
+	}()
 	n.mu.Lock()
 	t := n.cfg.Tasks[id]
 	if t == nil || t.Owner != owner || t.Direction != "in" {
@@ -432,10 +454,39 @@ func (n *Node) finish(owner, id string) (json.RawMessage, error) {
 		n.mu.Unlock()
 		return nil, errors.New("任务尚未接收")
 	}
+	if len(hashes) > 0 {
+		if len(hashes) != len(t.Files) {
+			n.mu.Unlock()
+			return nil, errors.New("最终校验清单数量不一致")
+		}
+		for i, hash := range hashes {
+			if !validFileSHA(hash) || t.Files[i].SHA != "" && t.Files[i].SHA != hash {
+				n.mu.Unlock()
+				return nil, errors.New("最终校验值无效或与原清单不同")
+			}
+		}
+	}
+	for i, f := range t.Files {
+		if f.Final == "" && f.Offset != f.Size {
+			n.mu.Unlock()
+			return nil, errors.New("文件尚未传完整")
+		}
+		if !validFileSHA(f.SHA) && len(hashes) == 0 {
+			n.mu.Unlock()
+			return nil, errors.New("尚未收到发送端的完整校验值")
+		}
+		if len(hashes) > 0 {
+			t.Files[i].SHA = hashes[i]
+		}
+	}
+	t.Status, t.Rate = "verifying", 0
 	files := append([]Meta{}, t.Files...)
 	root := t.Root
 	kind := t.Kind
 	n.mu.Unlock()
+	if e := n.persist(); e != nil {
+		return nil, e
+	}
 	for i, f := range files {
 		if f.Final != "" {
 			continue
@@ -471,6 +522,9 @@ func (n *Node) finish(owner, id string) (json.RawMessage, error) {
 			n.mu.Lock()
 			t.Done -= t.Files[i].Offset
 			t.Files[i].Offset = 0
+			if t.HashAtFinish {
+				t.Files[i].SHA = ""
+			}
 			t.Error = "文件校验不一致，已重置该文件进度"
 			n.mu.Unlock()
 			n.persist()
@@ -593,12 +647,13 @@ func (n *Node) prepare(id string) error {
 	return n.persist()
 }
 func (n *Node) sendTask(id string) error {
-	if e := n.prepare(id); e != nil {
+	stream, e := n.prepareTransfer(id)
+	if e != nil {
 		return e
 	}
 	n.mu.Lock()
 	t := n.cfg.Tasks[id]
-	offer := Offer{Kind: t.Kind, ID: t.ID, Sender: t.Sender, SenderName: t.SenderName, Title: t.Title, Folder: t.Folder, Files: cleanFiles(t.Files)}
+	offer := Offer{HashAtFinish: stream, Kind: t.Kind, ID: t.ID, Sender: t.Sender, SenderName: t.SenderName, Title: t.Title, Folder: t.Folder, Files: cleanFiles(t.Files)}
 	target := t.Target
 	files := append([]Meta{}, t.Files...)
 	n.mu.Unlock()
@@ -662,12 +717,20 @@ func (n *Node) sendTask(id string) error {
 			return errors.New("源文件已改变，请重新添加")
 		}
 		offset := reply.Offsets[i]
+		digest := sha256.New()
+		if stream {
+			if e = n.hashSourcePrefix(id, src, offset, digest); e != nil {
+				src.Close()
+				return e
+			}
+		}
 		fast := t.Kind != "text" && n.binaryLink(target) != nil
 		blockSize := chunkSize
 		if fast {
 			blockSize = binaryChunkSize
 		}
 		meter := transferRate{Started: time.Now()}
+		buffer := make([]byte, blockSize)
 		for offset < f.Size {
 			n.mu.Lock()
 			paused := t.Manual
@@ -686,10 +749,17 @@ func (n *Node) sendTask(id string) error {
 			if count > f.Size-offset {
 				count = f.Size - offset
 			}
-			data := make([]byte, int(count))
+			data := buffer[:int(count)]
 			if _, e = src.ReadAt(data, offset); e != nil {
 				src.Close()
 				return e
+			}
+			// Overlap the whole-file digest with the network/ACK wait. The
+			// buffer is reused only after both the hash and request complete.
+			var digestDone chan struct{}
+			if stream {
+				digestDone = make(chan struct{})
+				go func(block []byte) { digest.Write(block); close(digestDone) }(data)
 			}
 			var ack struct {
 				Offset int64 `json:"offset"`
@@ -699,6 +769,9 @@ func (n *Node) sendTask(id string) error {
 			} else {
 				e = n.Call(target, "chunk", Chunk{id, i, offset, data}, &ack)
 			}
+			if digestDone != nil {
+				<-digestDone
+			}
 			if e != nil {
 				src.Close()
 				return e
@@ -706,6 +779,10 @@ func (n *Node) sendTask(id string) error {
 			if ack.Offset <= offset || ack.Offset > f.Size {
 				src.Close()
 				return errors.New("对方返回的偏移无效")
+			}
+			if stream && ack.Offset != offset+count {
+				src.Close()
+				return errors.New("接收进度已改变，请重新协商续传")
 			}
 			n.mu.Lock()
 			t.Done += ack.Offset - offset
@@ -721,8 +798,27 @@ func (n *Node) sendTask(id string) error {
 		if e != nil || after.Size() != f.Size || after.ModTime().UnixNano() != f.Mod {
 			return errors.New("传输期间源文件发生变化，请重新添加")
 		}
+		if stream {
+			checksum := hex.EncodeToString(digest.Sum(nil))
+			if f.SHA != "" && checksum != f.SHA {
+				return errors.New("源文件内容与原校验值不一致，请重新添加")
+			}
+			n.mu.Lock()
+			t.Files[i].SHA = checksum
+			n.mu.Unlock()
+			if e = n.persist(); e != nil {
+				return e
+			}
+		}
 	}
-	if e := n.Call(target, "finish", struct{ ID string }{id}, &reply); e != nil {
+	n.mu.Lock()
+	hashes := make([]string, len(t.Files))
+	for i, f := range t.Files {
+		hashes[i] = f.SHA
+	}
+	n.mu.Unlock()
+	n.setTask(id, "verifying", "")
+	if e := n.Call(target, "finish", FinishRequest{ID: id, Hashes: hashes}, &reply); e != nil {
 		return e
 	}
 	n.mu.Lock()
@@ -791,6 +887,10 @@ func (n *Node) TaskAction(id, action string) error {
 		}
 		t.Status = "rejected"
 	case "pause":
+		if t.Status == "verifying" {
+			n.mu.Unlock()
+			return errors.New("文件已传完，正在校验保存，请稍候")
+		}
 		if t.Status == "waiting" {
 			n.mu.Unlock()
 			return errors.New("请先接收或拒绝这个任务")

@@ -410,6 +410,12 @@ func deviceName(d Device) string {
 	return name
 }
 func taskStatus(t Task) string {
+	if t.Status == "verifying" {
+		return "校验中"
+	}
+	if t.Status == "preparing" && t.Error == "正在校验续传前缀" {
+		return "校验续传前缀"
+	}
 	status := map[string]string{"preparing": "准备文件", "waiting": "等待接收", "waiting_remote": "等待对方接收", "receiving": "接收中", "sending": "发送中", "paused": "已暂停", "queued": "等待继续", "done": "已完成", "rejected": "已拒绝", "browser": "等待手机下载", "waiting_browser": "等待手机点击下载"}[t.Status]
 	if status == "" {
 		return t.Status

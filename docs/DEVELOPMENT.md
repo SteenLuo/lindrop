@@ -14,6 +14,7 @@
 | `model.go` | 配置、持久身份、设备视图和任务 |
 | `link.go` | 双向TLS连接、路由与RPC |
 | `link_binary.go`、`transfer_rate.go` | 直接TLS对端协商二进制文件块、签名摘要验证、有限长度帧和速度窗口；未协商或中转走旧路径 |
+| `transfer_stream.go` | 可选免预扫描协商、源端随传SHA256、可取消的续传前缀扫描、最终签名摘要清单；接收端保留磁盘复核 |
 | `transfer.go`、`text.go` | 文件分块/校验/续传、文字收发 |
 | `server.go`、`web/` | HTTP手机入口、发现和网页会话 |
 | `desktop_*_windows.go` | 原生窗口、气泡、媒体、拖放、提醒 |

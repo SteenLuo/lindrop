@@ -43,30 +43,31 @@ type Meta struct {
 	Offset int64  `json:"offset"`
 }
 type Task struct {
-	Media      string  `json:"media,omitempty"`
-	CreatedNS  int64   `json:"createdOrder,omitempty"`
-	Kind       string  `json:"kind,omitempty"`
-	ID         string  `json:"id"`
-	Direction  string  `json:"direction"`
-	Owner      string  `json:"owner"`
-	Sender     string  `json:"sender"`
-	SenderName string  `json:"senderName"`
-	Target     string  `json:"target"`
-	TargetName string  `json:"targetName"`
-	Title      string  `json:"title"`
-	Folder     bool    `json:"folder"`
-	Files      []Meta  `json:"files"`
-	Status     string  `json:"status"`
-	Error      string  `json:"error"`
-	Total      int64   `json:"total"`
-	Done       int64   `json:"done"`
-	Rate       float64 `json:"rate"`
-	Created    int64   `json:"created"`
-	Root       string  `json:"root,omitempty"`
-	Manual     bool    `json:"manual"`
-	Client     string  `json:"client,omitempty"`
-	Pull       bool    `json:"pull,omitempty"`
-	ShareID    string  `json:"shareID,omitempty"`
+	HashAtFinish bool    `json:"hashAtFinish,omitempty"`
+	Media        string  `json:"media,omitempty"`
+	CreatedNS    int64   `json:"createdOrder,omitempty"`
+	Kind         string  `json:"kind,omitempty"`
+	ID           string  `json:"id"`
+	Direction    string  `json:"direction"`
+	Owner        string  `json:"owner"`
+	Sender       string  `json:"sender"`
+	SenderName   string  `json:"senderName"`
+	Target       string  `json:"target"`
+	TargetName   string  `json:"targetName"`
+	Title        string  `json:"title"`
+	Folder       bool    `json:"folder"`
+	Files        []Meta  `json:"files"`
+	Status       string  `json:"status"`
+	Error        string  `json:"error"`
+	Total        int64   `json:"total"`
+	Done         int64   `json:"done"`
+	Rate         float64 `json:"rate"`
+	Created      int64   `json:"created"`
+	Root         string  `json:"root,omitempty"`
+	Manual       bool    `json:"manual"`
+	Client       string  `json:"client,omitempty"`
+	Pull         bool    `json:"pull,omitempty"`
+	ShareID      string  `json:"shareID,omitempty"`
 }
 type Share struct {
 	ID     string `json:"id"`
@@ -218,6 +219,9 @@ func NewNode(dir, name, save string) (*Node, error) {
 	}
 	for _, t := range n.cfg.Tasks {
 		if t.Direction == "in" && t.Status != "done" {
+			if t.Status == "verifying" {
+				t.Status = "receiving"
+			}
 			t.Done = 0
 			for i := range t.Files {
 				f := &t.Files[i]

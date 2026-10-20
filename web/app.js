@@ -51,7 +51,7 @@ async function refresh(force){
   updateWebNotices(first);renderDevices();renderMessages(false);hydrateTexts();
  }catch(e){$('linkState').textContent='已断开';$('linkState').classList.add('offline');if(e.status===401)showPair()}
 }
-var statuses={preparing:'准备中',waiting:'等待对方接收',waiting_remote:'等待对方接收',receiving:'接收中',sending:'发送中',paused:'已暂停',queued:'等待继续',done:'已送达',rejected:'已拒绝',browser:'待下载',waiting_browser:'待下载'};
+var statuses={preparing:'准备中',verifying:'校验中',waiting:'等待对方接收',waiting_remote:'等待对方接收',receiving:'接收中',sending:'发送中',paused:'已暂停',queued:'等待继续',done:'已送达',rejected:'已拒绝',browser:'待下载',waiting_browser:'待下载'};
 function messageTime(t){var d=new Date(t.created*1000),today=new Date();return (d.toDateString()===today.toDateString()?'':(d.getMonth()+1)+'月'+d.getDate()+'日 ')+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
 function conversation(){return (state.tasks||[]).filter(function(t){return peerFor(t)===target}).sort(function(a,b){var n=(a.createdOrder||a.created*1e9)-(b.createdOrder||b.created*1e9);return n||a.id.localeCompare(b.id)})}
 function textFold(s){var chars=Array.from(s),lines=s.split(/\r?\n/);return {long:chars.length>240||lines.length>7,preview:chars.slice(0,240).join('')}}
