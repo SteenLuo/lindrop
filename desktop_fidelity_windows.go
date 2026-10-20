@@ -94,7 +94,7 @@ func taskContextMenu(hwnd uintptr) {
 		for _, v := range []struct {
 			id   int
 			name string
-		}{{172, "复制文字  Ctrl+C"}, {174, "选择文字"}, {173, "展开 / 收起"}} {
+		}{{172, "复制文字  Ctrl+C"}, {174, "全选此条文字"}, {173, "展开 / 收起"}} {
 			call(user.NewProc("AppendMenuW"), menu, 0, uintptr(v.id), uintptr(unsafe.Pointer(wp(v.name))))
 		}
 	} else if t.Status == "waiting" {

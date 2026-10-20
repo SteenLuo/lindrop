@@ -16,6 +16,9 @@
 | `transfer.go`、`text.go` | 文件分块/校验/续传、文字收发 |
 | `server.go`、`web/` | HTTP手机入口、发现和网页会话 |
 | `desktop_*_windows.go` | 原生窗口、气泡、媒体、拖放、提醒 |
+| `desktop_viewport_windows.go` | 对话像素视口、滚轮动画、可见行绘制及32MiB行缓存；设备与共享列表仍为LISTBOX |
+| `desktop_selection_windows.go` | 气泡原位选字、原文字偏移映射、跨行及跨绘制段选择，不创建临时EDIT |
+| `desktop_text_windows.go` | 保留抗锯齿文字绘制，24MiB文字位图缓存与释放 |
 | `notice_settings.go`、`phone_names.go` | 提醒开关、局域网登记名称查询 |
 | `assets/`、`icon.ico` | 界面图标 |
 | `vendor/` | 随源码分发的Go依赖 |
@@ -47,3 +50,5 @@ go run github.com/akavel/rsrc@v0.10.2 -arch 386 -manifest app.manifest -ico icon
 AppData可能受打包开发工具的进程环境影响：即使环境变量和 `-state-dir` 字符串相同，物理文件也可能不同。最终必须从资源管理器双击交付的EXE，检查原名称、接收目录、历史、设备连接，正常退出重开验证。开发启动日志的管理凭证不适用于后续用户启动的进程。
 
 仓库工作流在Windows运行测试并构建32位GUI程序，上传构建产物供检查。Release附件应只包含程序、说明、许可证和校验值；工作流不自动公开发布Release。
+
+需要避免占用使用者前台时，完整原生回归放在GitHub Windows runner执行，本地只构建。不要启动可见测试窗口或操作使用者鼠标键盘；交互验收需另行安排。测试数据始终与真实节点隔离。

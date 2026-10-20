@@ -24,11 +24,13 @@ var chatExpanded = map[string]bool{}
 var chatParts []chatTextPart
 var chatPartsCache = map[string][]chatTextPart{}
 var chatKeepAnchor string
+var chatLayoutWidth int
 
 type chatTextPart struct {
 	ID                          string
 	MediaOffset, MediaHeight    int
 	Lines                       []string
+	TextLines                   []chatSelectableLine
 	First, Last, More, Expanded bool
 	Width                       int
 }
@@ -79,6 +81,7 @@ func switchChatDraft(peer string) {
 	if peer == chatDraftDevice {
 		return
 	}
+	closeChatSelection()
 	if chatDraftDevice != "" {
 		chatDrafts[chatDraftDevice] = text(guiControls[170])
 	}
@@ -253,7 +256,11 @@ func chatMessageParts(t Task, width int) []chatTextPart {
 	if chatExpanded[t.ID] {
 		limit = 0
 	}
-	lines, more := wrapChatLines(body, chatTextWidth(width)-28, limit)
+	mapped, more := selectableChatLines(body, chatTextWidth(width)-28, limit)
+	lines := make([]string, len(mapped))
+	for i, v := range mapped {
+		lines[i] = v.Text
+	}
 	longest := 0
 	for _, line := range lines {
 		n := 0
@@ -294,7 +301,7 @@ func chatMessageParts(t Task, width int) []chatTextPart {
 		if end > len(lines) {
 			end = len(lines)
 		}
-		parts = append(parts, chatTextPart{ID: t.ID, Lines: lines[start:end], First: start == 0, Last: end == len(lines), More: more, Expanded: expanded, Width: bw})
+		parts = append(parts, chatTextPart{ID: t.ID, Lines: lines[start:end], TextLines: mapped[start:end], First: start == 0, Last: end == len(lines), More: more, Expanded: expanded, Width: bw})
 	}
 	chatPartsCache[key] = parts
 	return parts
@@ -479,7 +486,7 @@ func paintChatItem(dc uintptr, t Task, x, y, width, index int) {
 			pad = 9
 		}
 		for i, line := range b.Lines {
-			label(dc, line, b.X+14, b.Y+pad+i*21, b.W-24, 21, ink, guiFont)
+			paintSelectableLine(dc, t, chatPartAt(index), i, line, b.X+14, b.Y+pad+i*21, b.W-24)
 		}
 		if b.Last && (b.More || b.Expanded) {
 			toggle := "展开全文"
@@ -646,12 +653,19 @@ func toggleChatText() {
 
 func refreshChatList(all []Task) bool {
 	tasks := conversationTasks(all, guiNode.id, guiSelected)
-	raw := fmt.Sprintf("%s:%d:%v", guiSelected, guiWidth, tasks)
+	raw := fmt.Sprintf("%s:%d:%v", guiSelected, chatListWidth(), tasks)
 	if raw == guiLastTasks {
 		return false
 	}
 	h := guiControls[126]
 	top := int(msg(h, 0x18e, 0, 0))
+	remainder := 0.0
+	if v := chatViews[h]; v != nil {
+		v.index()
+		if top < len(v.Heights) {
+			remainder = v.Y - float64(v.Tops[top])
+		}
+	}
 	nearBottom := len(guiTasks) == 0
 	if len(guiTasks) > 0 {
 		var r, client rect
@@ -685,6 +699,7 @@ func refreshChatList(all []Task) bool {
 		}
 	}
 	guiLastTasks = raw
+	chatLayoutWidth = chatListWidth()
 	chatLastDevice = guiSelected
 	resetList(h, len(guiTasks))
 	for i, t := range guiTasks {
@@ -705,6 +720,9 @@ func refreshChatList(all []Task) bool {
 		scrollChatBottom()
 	} else if top < len(guiTasks) {
 		msg(h, 0x197, uintptr(top), 0)
+		if v := chatViews[h]; v != nil {
+			v.scroll(h, v.Y+remainder, false)
+		}
 	}
 	return true
 }
@@ -735,7 +753,7 @@ func paintChatScene(dc uintptr) {
 	fill(dc, rct(x, h-138, w, 138), paper)
 	stroke(dc, x, h-138, guiWidth, h-138, lineColor, 1)
 	label(dc, "拖入发送 · 文件可拖出复制", x+232, h-128, w-260, 20, muted, guiTiny)
-	hint := "Enter 换行 · Ctrl + Enter 发送 · 双击气泡选字"
+	hint := "Enter 换行 · Ctrl + Enter 发送 · 拖动选择文字"
 	if time.Now().Before(chatFeedbackUntil) {
 		hint = chatFeedback
 	}

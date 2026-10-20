@@ -131,7 +131,6 @@ func enabled(id int, yes bool) {
 }
 
 func layout() {
-	closeChatSelection()
 	var r rect
 	call(user.NewProc("GetClientRect"), guiMain, uintptr(unsafe.Pointer(&r)))
 	guiWidth, guiHeight = int(float64(r.R)/guiScale), int(float64(r.B)/guiScale)
@@ -175,6 +174,9 @@ func layout() {
 	case 0:
 		switchChatDraft(guiSelected)
 		move(126, 334, 74, w-350, h-212)
+		if chatLayoutWidth != chatListWidth() {
+			refreshChatList(guiAllTasks)
+		}
 		visible(126, len(guiTasks) > 0)
 		for i, t := range guiTasks {
 			height := uintptr(sc(chatRowHeightAt(t, i)))
@@ -1054,10 +1056,13 @@ func runDesktop(n *Node) {
 	themedControl("BUTTON", "发送文字", 159, 0)
 	themedControl("BUTTON", "查看文字", 164, 0)
 	themedControl("EDIT", n.name(), 105, 0x80)
+	registerChatViewport()
 	for _, id := range []int{111, 126, 143} {
 		style := uint32(0x00200000 | 0x10 | 1 | 0x100 | 0x40 | 0x2000)
 		if id == 126 {
-			style = (style &^ 0x10) | 0x20 | 0x02000000
+			themedControl("LinDropConversation", "", id, 0x00200000|0x02000000)
+			acceptDesktopDrops(guiControls[id])
+			continue
 		}
 		themedControl("LISTBOX", "", id, style)
 	}

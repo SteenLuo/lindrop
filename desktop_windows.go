@@ -393,7 +393,7 @@ func doCommand(id, notification int) {
 				copyChatFiles(t.ID)
 				return
 			}
-			if e := copyDesktopText(chatBody(t)); e != nil {
+			if e := copyDesktopText(selectedChatText(t)); e != nil {
 				showError(e.Error())
 			} else {
 				set(guiControls[190], "已复制文字")
