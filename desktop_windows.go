@@ -474,15 +474,20 @@ func doCommand(id, notification int) {
 			queue(refreshShares)
 			return nil
 		})
-	case 150, 153, 154:
+	case 153:
+		if t, ok := currentTask(); ok {
+			folder, selected, e := guiNode.taskFileLocation(t.ID)
+			if e == nil {
+				e = revealInFolder(folder, selected)
+			}
+			if e != nil {
+				showError(e.Error())
+			}
+		}
+	case 150, 154:
 		guiNode.mu.Lock()
 		dir := guiNode.cfg.SaveDir
 		guiNode.mu.Unlock()
-		if id == 153 {
-			if t, ok := currentTask(); ok && t.Root != "" {
-				dir = t.Root
-			}
-		}
 		exec.Command("explorer.exe", dir).Start()
 	case 151:
 		work(func() error {

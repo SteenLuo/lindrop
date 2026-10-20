@@ -87,6 +87,7 @@ func taskContextMenu(hwnd uintptr) {
 	}
 	menu := call(user.NewProc("CreatePopupMenu"))
 	defer call(user.NewProc("DestroyMenu"), menu)
+	locationAdded := false
 	if t.Kind != "text" && (t.Direction == "out" || t.Status == "done") {
 		call(user.NewProc("AppendMenuW"), menu, 0, 172, uintptr(unsafe.Pointer(wp("复制文件  Ctrl+C"))))
 	}
@@ -105,9 +106,15 @@ func taskContextMenu(hwnd uintptr) {
 			call(user.NewProc("AppendMenuW"), menu, 0, uintptr(v.id), uintptr(unsafe.Pointer(wp(v.name))))
 		}
 	} else if id, name := taskAction(t); id != 0 {
+		if id == 153 {
+			name, locationAdded = "打开所在文件夹", true
+		}
 		call(user.NewProc("AppendMenuW"), menu, 0, uintptr(id), uintptr(unsafe.Pointer(wp(name))))
 	} else if t.Kind == "text" || (t.Direction != "out" && t.Status != "done") {
 		return
+	}
+	if !locationAdded && t.Kind != "text" && (t.Direction == "out" || t.Direction == "in" && t.Status == "done") {
+		call(user.NewProc("AppendMenuW"), menu, 0, 153, uintptr(unsafe.Pointer(wp("打开所在文件夹"))))
 	}
 	var p point
 	call(user.NewProc("GetCursorPos"), uintptr(unsafe.Pointer(&p)))
