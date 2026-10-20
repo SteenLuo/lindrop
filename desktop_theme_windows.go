@@ -881,6 +881,7 @@ func buttonProc(hwnd uintptr, m uint32, w, l uintptr) uintptr {
 }
 func listProc(hwnd uintptr, m uint32, w, l uintptr) uintptr {
 	if m == 0x14 {
+		fillListBackground(hwnd, w)
 		return 1
 	}
 	if m == 0xf {

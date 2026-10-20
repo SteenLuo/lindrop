@@ -29,6 +29,21 @@ func bufferDC(target uintptr, width, height, x, y int, paint func(uintptr)) {
 	call(gdi.NewProc("DeleteDC"), dc)
 }
 
+// LISTBOX can erase an exposed scroll strip without drawing another item.
+// Honour the DC's update clip so blank space is painted without clearing rows.
+func fillListBackground(hwnd, dc uintptr) {
+	if dc == 0 {
+		return
+	}
+	var client rect
+	call(user.NewProc("GetClientRect"), hwnd, uintptr(unsafe.Pointer(&client)))
+	bg := canvas
+	if hwnd == guiControls[111] {
+		bg = paper
+	}
+	fill(dc, client, bg)
+}
+
 func paintBufferedList(hwnd uintptr) {
 	var ps paintStruct
 	dc := call(user.NewProc("BeginPaint"), hwnd, uintptr(unsafe.Pointer(&ps)))
@@ -39,11 +54,7 @@ func paintBufferedList(hwnd uintptr) {
 		return
 	}
 	bufferDC(dc, int(client.R), int(client.B), 0, 0, func(mem uintptr) {
-		bg := canvas
-		if hwnd == guiControls[111] {
-			bg = paper
-		}
-		fill(mem, client, bg)
+		fillListBackground(hwnd, mem)
 		call(user.NewProc("CallWindowProcW"), guiListProc[hwnd], hwnd, 0x318, mem, 0xc)
 	})
 }
