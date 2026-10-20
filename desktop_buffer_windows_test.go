@@ -64,7 +64,7 @@ func TestBufferedListScrollTailHasCanvas(t *testing.T) {
 		t.Fatal("list")
 	}
 	guiControls[126] = h
-	guiListProc[h] = call(user.NewProc("SetWindowLongW"), h, uintptr(0xfffffffc), syscall.NewCallback(listProc))
+	guiListProc[h] = setWindowProcedure(h, syscall.NewCallback(listProc))
 	defer delete(guiListProc, h)
 	for i := range guiTasks {
 		msg(h, 0x180, 0, uintptr(unsafe.Pointer(wp("row"))))
@@ -147,7 +147,7 @@ func TestBufferedListPrintsOwnerDrawAndHoverStaysLocal(t *testing.T) {
 		t.Fatal("list")
 	}
 	guiControls[126] = h
-	guiListProc[h] = call(user.NewProc("SetWindowLongW"), h, uintptr(0xfffffffc), syscall.NewCallback(listProc))
+	guiListProc[h] = setWindowProcedure(h, syscall.NewCallback(listProc))
 	defer delete(guiListProc, h)
 	for i := range guiTasks {
 		msg(h, 0x180, 0, uintptr(unsafe.Pointer(wp("row"))))

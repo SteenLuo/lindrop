@@ -70,7 +70,7 @@ func TestImagePreviewIdleHasNoPeriodicRepaint(t *testing.T) {
 			destroyWindow.Call(mediaWindow)
 		}
 	}()
-	call(user.NewProc("SetWindowLongW"), mediaWindow, uintptr(0xfffffffc), syscall.NewCallback(mediaCountTestProc))
+	setWindowProcedure(mediaWindow, syscall.NewCallback(mediaCountTestProc))
 	pumpMediaTest(150 * time.Millisecond)
 	mediaPaintTestCount = 0
 	mediaTimerTestCount = 0

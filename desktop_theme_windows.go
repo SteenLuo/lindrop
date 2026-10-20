@@ -843,11 +843,11 @@ func themedControl(class, label string, id int, style uint32) uintptr {
 	guiAllControls = append(guiAllControls, id)
 	if class == "BUTTON" {
 		acceptDesktopDrops(h)
-		guiButtonProc[h] = call(user.NewProc("SetWindowLongW"), h, uintptr(0xfffffffc), syscall.NewCallback(buttonProc))
+		guiButtonProc[h] = setWindowProcedure(h, syscall.NewCallback(buttonProc))
 	}
 	if class == "LISTBOX" {
 		acceptDesktopDrops(h)
-		guiListProc[h] = call(user.NewProc("SetWindowLongW"), h, uintptr(0xfffffffc), syscall.NewCallback(listProc))
+		guiListProc[h] = setWindowProcedure(h, syscall.NewCallback(listProc))
 	}
 	return h
 }
@@ -1197,7 +1197,7 @@ func showConnect() {
 		guiControls[it.id] = h
 		msg(h, 0x30, guiFont, 1)
 		if class == "BUTTON" {
-			guiButtonProc[h] = call(user.NewProc("SetWindowLongW"), h, uintptr(0xfffffffc), syscall.NewCallback(buttonProc))
+			guiButtonProc[h] = setWindowProcedure(h, syscall.NewCallback(buttonProc))
 		}
 	}
 	cue(113, "例如 192.168.1.10:8776")

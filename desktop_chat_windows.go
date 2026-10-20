@@ -94,7 +94,7 @@ func createChatComposer() {
 	msg(h, 0xc5, maxTextBytes, 0)
 	cue(170, "输入文字，或将文件拖到此窗口")
 	acceptDesktopDrops(h)
-	chatComposeProc = call(user.NewProc("SetWindowLongW"), h, uintptr(0xfffffffc), syscall.NewCallback(chatEditProc))
+	chatComposeProc = setWindowProcedure(h, syscall.NewCallback(chatEditProc))
 	themedControl("BUTTON", "发送", 171, 0)
 }
 

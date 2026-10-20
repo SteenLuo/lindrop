@@ -92,7 +92,7 @@ func openTextWindow(content string, readOnly bool) {
 		}
 		h := call(createWindow, 0, uintptr(unsafe.Pointer(wp("BUTTON"))), uintptr(unsafe.Pointer(wp(b.name))), 0x5001000b, uintptr(sc(b.x)), uintptr(sc(449)), uintptr(sc(116)), uintptr(sc(37)), guiTextWindow, uintptr(b.id), instance, 0)
 		msg(h, 0x30, guiFont, 1)
-		guiButtonProc[h] = call(user.NewProc("SetWindowLongW"), h, uintptr(0xfffffffc), syscall.NewCallback(buttonProc))
+		guiButtonProc[h] = setWindowProcedure(h, syscall.NewCallback(buttonProc))
 		guiTextButtons = append(guiTextButtons, h)
 	}
 	call(user.NewProc("EnableWindow"), guiMain, 0)

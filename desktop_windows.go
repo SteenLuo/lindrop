@@ -101,6 +101,16 @@ func wp(s string) *uint16 { p, _ := syscall.UTF16PtrFromString(s); return p }
 //go:uintptrescapes
 func call(p *syscall.LazyProc, args ...uintptr) uintptr { v, _, _ := p.Call(args...); return v }
 func sc(v int) int                                      { return int(float64(v) * guiScale) }
+
+func setWindowProcedure(h, callback uintptr) uintptr {
+	name := "SetWindowLongW"
+	if unsafe.Sizeof(uintptr(0)) == 8 {
+		name = "SetWindowLongPtrW"
+	}
+	index := int32(-4) // GWLP_WNDPROC is pointer-sized on Win64.
+	return call(user.NewProc(name), h, uintptr(index), callback)
+}
+
 func set(h uintptr, s string) {
 	if h != 0 && text(h) != s {
 		setText.Call(h, uintptr(unsafe.Pointer(wp(s))))
