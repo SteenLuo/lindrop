@@ -150,3 +150,20 @@ func TestPendingShortTextStatusHasIndependentWidth(t *testing.T) {
 		}
 	}
 }
+
+func TestMediaStatusShowsMeasuredTransferProgress(t *testing.T) {
+	task := Task{Status: "sending", Total: 10 * 1024 * 1024, Done: 4 * 1024 * 1024, Rate: 20 * 1024 * 1024}
+	s := chatMediaTransferStatus(task)
+	if !strings.Contains(s, "40%") || !strings.Contains(s, "/s") || !strings.Contains(s, "发送中") {
+		t.Fatal("video progress missing", s)
+	}
+	task.Status = "receiving"
+	task.Rate = 0
+	if s := chatMediaTransferStatus(task); !strings.Contains(s, "40%") || strings.Contains(s, "/s") {
+		t.Fatal("unmeasured receive rate was invented", s)
+	}
+	task.Status = "preparing"
+	if s := chatMediaTransferStatus(task); strings.Contains(s, "%") || strings.Contains(s, "/s") {
+		t.Fatal("hash preparation pretends to transfer", s)
+	}
+}

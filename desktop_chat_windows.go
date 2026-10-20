@@ -515,7 +515,7 @@ func paintChatItem(dc uintptr, t Task, x, y, width, index int) {
 		return
 	} else if paintChatMedia(dc, t, b) {
 		if b.Last && t.Status != "done" {
-			rightLabel(dc, taskStatus(t), chatTextStatusRect(t, b, x+width, false), muted, guiTiny)
+			rightLabel(dc, chatMediaTransferStatus(t), chatTextStatusRect(t, b, x+width, false), muted, guiTiny)
 		}
 		return
 	} else {
@@ -576,6 +576,24 @@ func paintChatItem(dc uintptr, t Task, x, y, width, index int) {
 	} else {
 		rightLabel(dc, status, rct(b.X+176, b.Y+b.H-30, b.W-192, 20), muted, guiTiny)
 	}
+}
+
+func chatMediaTransferStatus(t Task) string {
+	s := taskStatus(t)
+	if (t.Status == "sending" || t.Status == "receiving") && t.Total > 0 {
+		progress := float64(t.Done) / float64(t.Total)
+		if progress < 0 {
+			progress = 0
+		}
+		if progress > 1 {
+			progress = 1
+		}
+		s += fmt.Sprintf(" · %.0f%%", progress*100)
+		if t.Rate > 0 {
+			s += " · " + formatSize(int64(t.Rate)) + "/s"
+		}
+	}
+	return s
 }
 
 func chatHit(t Task, width, x, y int) int { return chatHitPart(t, width, x, y, nil) }
