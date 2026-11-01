@@ -105,7 +105,7 @@ func refreshIncomingNotices(tasks []Task) {
 		chatFeedback = noticeText
 		chatFeedbackUntil = time.Now().Add(5 * time.Second)
 		invalidate(guiMain)
-		invalidate(guiComposerWindow)
+		invalidate(guiComposerFooter)
 	}
 	if settings.Sound && time.Since(guiLastNoticeSound) > 1500*time.Millisecond {
 		call(user.NewProc("MessageBeep"), 0x40)

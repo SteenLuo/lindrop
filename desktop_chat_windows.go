@@ -842,26 +842,35 @@ func paintChatScene(dc uintptr) {
 		paintEmpty(dc, x+16, 74, w-32, g.ListHeight, "transfer", "发一段文字，或分享一份文件", "对方发来的在左边，你发出的在右边。")
 	}
 	if guiComposerWindow == 0 {
-		paintComposerSurface(dc)
+		paintComposerSurfaceOffset(dc, 0, 0)
+	}
+	if guiComposerFooter == 0 {
+		paintComposerFooterOffset(dc, 0, 0)
 	}
 }
 
 func paintComposerSurface(dc uintptr) {
 	paintComposerSurfaceOffset(dc, 0, 0)
+	paintComposerFooterOffset(dc, 0, 0)
 }
 
 func paintComposerSurfaceOffset(dc uintptr, dx, dy int) {
-	x, w, h := 318+dx, guiWidth-318, guiHeight+dy
+	x, w := 318+dx, guiWidth-318
 	g := currentComposerLayout()
 	top := g.Top + dy
-	fill(dc, rct(x, top, w, h-top), paper)
+	fill(dc, rct(x, top, w, g.FooterTop+dy-top), paper)
 	stroke(dc, x, top, x+w, top, lineColor, 1)
 	stroke(dc, x+w/2-18, top+3, x+w/2+18, top+3, lineColor, 2)
 	label(dc, "拖动上沿调整输入区", x+232, top+10, w-260, 20, muted, guiTiny)
 	paintComposerPicturesOffset(dc, dx, dy)
+}
+
+func paintComposerFooterOffset(dc uintptr, dx, dy int) {
+	x, w, top := 318+dx, guiWidth-318, currentComposerLayout().FooterTop+dy
+	fill(dc, rct(x, top, w, composerFooterHeight), paper)
 	hint := "Enter 换行 · Ctrl + Enter 发送 · Ctrl + V 粘贴截图"
 	if time.Now().Before(chatFeedbackUntil) {
 		hint = chatFeedback
 	}
-	label(dc, hint, x+24, h-34, w-156, 24, muted, guiTiny)
+	label(dc, hint, x+24, top+11, w-156, 24, muted, guiTiny)
 }

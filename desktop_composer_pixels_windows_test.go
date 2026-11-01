@@ -17,6 +17,37 @@ import (
 
 var syscallDwmFlush = syscall.NewLazyDLL("dwmapi.dll").NewProc("DwmFlush")
 
+func checkPresentedFooter(frame *image.NRGBA) error {
+	footer := chatClient(guiComposerFooter)
+	if int(footer.B) != sc(composerFooterHeight) {
+		return fmt.Errorf("footer height changed: %d", footer.B)
+	}
+	var fp, bp point
+	call(user.NewProc("MapWindowPoints"), guiComposerFooter, guiMain, uintptr(unsafe.Pointer(&fp)), 1)
+	call(user.NewProc("MapWindowPoints"), guiControls[171], guiMain, uintptr(unsafe.Pointer(&bp)), 1)
+	button := chatClient(guiControls[171])
+	abs := func(n int) int {
+		if n < 0 {
+			return -n
+		}
+		return n
+	}
+	if abs(int(fp.Y+footer.B)-frame.Bounds().Dy()) > 1 || abs(frame.Bounds().Dy()-int(bp.Y+button.B)-sc(7)) > 1 || int(button.B) != sc(29) {
+		return fmt.Errorf("footer/button lost bottom anchor: footer=%v button=%v/%v frame=%v", fp, bp, button, frame.Bounds())
+	}
+	if abs(frame.Bounds().Dx()-int(bp.X+button.R)-sc(25)) > 1 {
+		return fmt.Errorf("send button lost right anchor")
+	}
+	for y := int(bp.Y+button.B) + 1; y < frame.Bounds().Dy()-1; y++ {
+		for x := int(bp.X) + sc(8); x < int(bp.X+button.R)-sc(8); x++ {
+			if frame.NRGBAAt(x, y) != (imagecolor.NRGBA{255, 255, 255, 255}) {
+				return fmt.Errorf("stale colored pixel below send button at %d,%d", x, y)
+			}
+		}
+	}
+	return nil
+}
+
 // Read the frame already presented on the disposable CI desktop, rather than
 // printing controls into a fresh bitmap (which would conceal stale pixels).
 func captureComposerFrame() (*image.NRGBA, error) {
@@ -102,12 +133,13 @@ func TestDesktopComposerPresentedPixelFrames(t *testing.T) {
 	chatTextCache["sample-text"] = "一段用于绘制验证的示例文字"
 	created := make(chan struct{})
 	ready := false
+	sampleOnline := true
 	guiReadSnapshot = func() map[string]interface{} {
 		if !ready {
 			ready = true
 			close(created)
 		}
-		return map[string]interface{}{"saveDir": n.cfg.SaveDir, "devices": []Device{{ID: "sample-peer", Name: "示例设备", Online: true}}, "tasks": []Task{
+		return map[string]interface{}{"saveDir": n.cfg.SaveDir, "devices": []Device{{ID: "sample-peer", Name: "示例设备", Online: sampleOnline}}, "tasks": []Task{
 			{ID: "sample-file", Title: "示例文档.txt", Direction: "in", Sender: "sample-peer", Target: n.id, Status: "done", Total: 1024, Done: 1024, Created: 1},
 			{ID: "sample-text", Kind: "text", Direction: "out", Sender: n.id, Target: "sample-peer", Status: "done", Created: 2},
 		}}
@@ -133,6 +165,11 @@ func TestDesktopComposerPresentedPixelFrames(t *testing.T) {
 			result <- failure
 			return
 		}
+		var fixedButton rect
+		onUI(func() error {
+			call(user.NewProc("GetWindowRect"), guiControls[171], uintptr(unsafe.Pointer(&fixedButton)))
+			return nil
+		})
 		for step, height := range []int{250, 64, 260, 96, 230, 64, 250, 120} {
 			failure = onUI(func() error { resizeChatComposer(height); return nil })
 			if failure != nil {
@@ -146,6 +183,16 @@ func TestDesktopComposerPresentedPixelFrames(t *testing.T) {
 			failure = onUI(func() error {
 				frame, e := captureComposerFrame()
 				if e != nil {
+					return e
+				}
+				var button rect
+				call(user.NewProc("GetWindowRect"), guiControls[171], uintptr(unsafe.Pointer(&button)))
+				if button != fixedButton {
+					saveComposerEvidence(frame, fmt.Sprintf("footer-moved-%02d", step))
+					return fmt.Errorf("input resize moved send button")
+				}
+				if e = checkPresentedFooter(frame); e != nil {
+					saveComposerEvidence(frame, fmt.Sprintf("footer-stale-%02d", step))
 					return e
 				}
 				var p point
@@ -174,6 +221,79 @@ func TestDesktopComposerPresentedPixelFrames(t *testing.T) {
 				result <- failure
 				return
 			}
+		}
+		failure = onUI(func() error { chatResizeActive = false; return nil })
+		var original rect
+		if failure == nil {
+			failure = onUI(func() error {
+				call(user.NewProc("GetWindowRect"), guiMain, uintptr(unsafe.Pointer(&original)))
+				return nil
+			})
+		}
+		if failure != nil {
+			result <- failure
+			return
+		}
+		for phase, name := range []string{"maximized", "restored", "smaller", "original"} {
+			failure = onUI(func() error {
+				switch phase {
+				case 0:
+					showWindow.Call(guiMain, 3)
+				case 1:
+					showWindow.Call(guiMain, 9)
+				case 2:
+					call(user.NewProc("SetWindowPos"), guiMain, 0, uintptr(original.L), uintptr(original.T), uintptr(original.R-original.L-70), uintptr(original.B-original.T-35), 0x4|0x10)
+				case 3:
+					call(user.NewProc("SetWindowPos"), guiMain, 0, uintptr(original.L), uintptr(original.T), uintptr(original.R-original.L), uintptr(original.B-original.T), 0x4|0x10)
+				}
+				return nil
+			})
+			if failure != nil {
+				result <- failure
+				return
+			}
+			time.Sleep(75 * time.Millisecond)
+			failure = onUI(func() error {
+				frame, e := captureComposerFrame()
+				if e != nil {
+					return e
+				}
+				if e = checkPresentedFooter(frame); e != nil {
+					saveComposerEvidence(frame, "footer-bad-"+name)
+					return e
+				}
+				return saveComposerEvidence(frame, "footer-"+name)
+			})
+			if failure != nil {
+				result <- failure
+				return
+			}
+		}
+		failure = onUI(func() error { sampleOnline = false; refreshGUI(); return nil })
+		if failure != nil {
+			result <- failure
+			return
+		}
+		time.Sleep(75 * time.Millisecond)
+		failure = onUI(func() error {
+			frame, e := captureComposerFrame()
+			if e != nil {
+				return e
+			}
+			if e = checkPresentedFooter(frame); e != nil {
+				saveComposerEvidence(frame, "footer-bad-offline")
+				return e
+			}
+			return saveComposerEvidence(frame, "footer-offline")
+		})
+		if failure != nil {
+			result <- failure
+			return
+		}
+		failure = onUI(func() error { sampleOnline = true; refreshGUI(); return nil })
+		if failure != nil {
+			result <- failure
+			return
 		}
 		result <- runComposerDragProfile(t, onUI)
 	}()

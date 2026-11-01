@@ -57,15 +57,17 @@ func TestComposerPanelPositionsAndNativeRedraw(t *testing.T) {
 	h, v := viewportTestWindow(t)
 	oldMain, oldWidth, oldHeight, oldComposer, oldPositions := guiMain, guiWidth, guiHeight, chatComposerHeight, guiPositions
 	oldDraft, oldPictures, oldPanel := chatDraftDevice, chatPictures, guiComposerWindow
+	oldFooter := guiComposerFooter
 	oldAll, oldButtons, oldProc := guiAllControls, guiButtonProc, chatComposeProc
 	oldActive, oldFrame := chatResizeActive, chatDragFrame
 	oldControls := map[int]uintptr{}
-	for _, id := range []int{121, 122, 170, 171, composerPanelID} {
+	for _, id := range []int{121, 122, 170, 171, composerPanelID, composerFooterID} {
 		oldControls[id] = guiControls[id]
 	}
 	defer func() {
 		guiMain, guiWidth, guiHeight, chatComposerHeight, guiPositions = oldMain, oldWidth, oldHeight, oldComposer, oldPositions
 		chatDraftDevice, chatPictures, guiComposerWindow = oldDraft, oldPictures, oldPanel
+		guiComposerFooter = oldFooter
 		guiAllControls, guiButtonProc, chatComposeProc = oldAll, oldButtons, oldProc
 		chatResizeActive, chatDragFrame = oldActive, oldFrame
 		for id, handle := range oldControls {
@@ -83,6 +85,7 @@ func TestComposerPanelPositionsAndNativeRedraw(t *testing.T) {
 	guiButtonProc = map[uintptr]uintptr{}
 	guiAllControls = nil
 	guiComposerWindow = 0
+	guiComposerFooter = 0
 	chatDraftDevice = "resize-test"
 	chatPictures = map[string][]draftPicture{}
 	call(user.NewProc("SetParent"), h, guiMain)
@@ -98,10 +101,13 @@ func TestComposerPanelPositionsAndNativeRedraw(t *testing.T) {
 	if ex&0x02010000 != 0x02010000 {
 		t.Fatal("composer lacks system buffering or dialog navigation")
 	}
-	for _, id := range []int{121, 122, 170, 171} {
+	for _, id := range []int{121, 122, 170} {
 		if call(user.NewProc("GetParent"), guiControls[id]) != guiComposerWindow {
 			t.Fatal("native input/tool not in composited subtree", id)
 		}
+	}
+	if call(user.NewProc("GetParent"), guiControls[171]) != guiComposerFooter {
+		t.Fatal("send button must belong to fixed footer")
 	}
 	if call(user.NewProc("GetParent"), h) != guiMain {
 		t.Fatal("conversation must stay outside composited subtree")
@@ -137,8 +143,8 @@ func TestComposerPanelPositionsAndNativeRedraw(t *testing.T) {
 		if int(chatClient(h).B) != g.ListHeight || guiPositions[170][3] != g.TextHeight || guiPositions[170][1] != g.TextTop-g.Top {
 			t.Fatal("child geometry does not match panel coordinates")
 		}
-		if guiPositions[171][1] != guiHeight-36-g.Top {
-			t.Fatal("send button did not follow panel height")
+		if guiPositions[171][1] != 9 {
+			t.Fatal("send button left fixed footer baseline")
 		}
 		resizeProbePositions = 0
 		if resizeChatComposer(height) || resizeProbePositions != 0 {

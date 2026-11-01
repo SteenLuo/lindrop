@@ -589,6 +589,10 @@ func mainProc(hwnd uintptr, message uint32, w, l uintptr) uintptr {
 			return 0
 		default:
 		}
+		if !chatFeedbackUntil.IsZero() && time.Now().After(chatFeedbackUntil) {
+			chatFeedbackUntil = time.Time{}
+			invalidate(guiComposerFooter)
+		}
 		refreshGUI()
 		return 0
 	case 0x138, 0x133:

@@ -13,6 +13,9 @@ func TestComposerGeometryPreservesConversationAndFooter(t *testing.T) {
 				if g.TextTop+g.TextHeight != height-45 || g.TextTop < g.Top+44 {
 					t.Fatal("text overlaps toolbar or send/footer", g)
 				}
+				if g.FooterTop != height-composerFooterHeight || g.TextTop+g.TextHeight != g.FooterTop {
+					t.Fatal("input/footer boundary drifted", g)
+				}
 				if pictures > 0 && g.PreviewTop+70 > g.TextTop {
 					t.Fatal("thumbnails overlap input", g)
 				}

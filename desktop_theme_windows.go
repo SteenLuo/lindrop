@@ -174,8 +174,10 @@ func layout() {
 	case 0:
 		switchChatDraft(guiSelected)
 		g := currentComposerLayout()
-		move(composerPanelID, 318, g.Top, w-318, h-g.Top)
+		move(composerPanelID, 318, g.Top, w-318, g.FooterTop-g.Top)
 		visible(composerPanelID, true)
+		move(composerFooterID, 318, g.FooterTop, w-318, composerFooterHeight)
+		visible(composerFooterID, true)
 		move(126, 334, 74, w-350, g.ListHeight)
 		if chatLayoutWidth != chatListWidth() {
 			refreshChatList(guiAllTasks)
@@ -232,6 +234,7 @@ func layout() {
 		invalidate(guiControls[id])
 	}
 	invalidate(guiMain)
+	invalidate(guiComposerFooter)
 }
 func taskAction(t Task) (int, string) {
 	if t.Status == "done" {

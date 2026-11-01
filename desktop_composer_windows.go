@@ -34,7 +34,7 @@ func currentComposerLayout() composerGeometry {
 func composerFeedback(s string) {
 	chatFeedback, chatFeedbackUntil = s, time.Now().Add(6*time.Second)
 	invalidate(guiMain)
-	invalidate(guiComposerWindow)
+	invalidate(guiComposerFooter)
 }
 
 func pasteChatScreenshot() bool {

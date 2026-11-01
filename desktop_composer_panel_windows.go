@@ -6,42 +6,56 @@ import (
 )
 
 const composerPanelID = 480
+const composerFooterID = 481
 
-var guiComposerWindow uintptr
+var guiComposerWindow, guiComposerFooter uintptr
 
 // A separate composited subtree keeps native EDIT background erasure and
 // owner-drawn toolbar painting in one system buffer. The conversation/video
 // surfaces are outside this subtree and retain their existing painting path.
 func createComposerPanel() {
-	if guiComposerWindow != 0 {
+	if guiComposerWindow != 0 && guiComposerFooter != 0 {
 		return
 	}
 	instance := call(kernel.NewProc("GetModuleHandleW"), 0)
 	wc := winClass{Size: uint32(unsafe.Sizeof(winClass{})), Proc: syscall.NewCallback(composerPanelProc), Instance: instance, Cursor: call(user.NewProc("LoadCursorW"), 0, 32512), Name: wp("LinDropComposerPanel")}
 	call(user.NewProc("RegisterClassExW"), uintptr(unsafe.Pointer(&wc)))
-	guiComposerWindow = call(createWindow, 0x02000000|0x00010000, uintptr(unsafe.Pointer(wc.Name)), 0, 0x56000000, 0, 0, 0, 0, guiMain, composerPanelID, instance, 0)
-	if guiComposerWindow != 0 {
-		guiControls[composerPanelID] = guiComposerWindow
-		guiAllControls = append(guiAllControls, composerPanelID)
-		acceptDesktopDrops(guiComposerWindow)
+	for _, item := range []struct {
+		id     int
+		handle *uintptr
+	}{{composerPanelID, &guiComposerWindow}, {composerFooterID, &guiComposerFooter}} {
+		if *item.handle != 0 {
+			continue
+		}
+		*item.handle = call(createWindow, 0x02000000|0x00010000, uintptr(unsafe.Pointer(wc.Name)), 0, 0x56000000, 0, 0, 0, 0, guiMain, uintptr(item.id), instance, 0)
+		if *item.handle != 0 {
+			guiControls[item.id] = *item.handle
+			guiAllControls = append(guiAllControls, item.id)
+			acceptDesktopDrops(*item.handle)
+		}
 	}
 }
 
 func attachComposerControls() {
-	if guiComposerWindow == 0 {
-		return
-	}
 	for _, id := range []int{121, 122, 170, 171} {
-		if h := guiControls[id]; h != 0 {
-			call(user.NewProc("SetParent"), h, guiComposerWindow)
+		parent := guiComposerWindow
+		if id == 171 {
+			parent = guiComposerFooter
+		}
+		if h := guiControls[id]; h != 0 && parent != 0 {
+			call(user.NewProc("SetParent"), h, parent)
 			delete(guiPositions, id)
 		}
 	}
 }
 
 func composerLocalPosition(id, x, y int) (int, int) {
-	if guiComposerWindow != 0 && call(user.NewProc("GetParent"), guiControls[id]) == guiComposerWindow {
+	parent := call(user.NewProc("GetParent"), guiControls[id])
+	if guiComposerWindow != 0 && parent == guiComposerWindow {
 		return x - 318, y - currentComposerLayout().Top
+	}
+	if guiComposerFooter != 0 && parent == guiComposerFooter {
+		return x - 318, y - currentComposerLayout().FooterTop
 	}
 	return x, y
 }
@@ -52,6 +66,9 @@ func composerPanelProc(h uintptr, m uint32, w, l uintptr) uintptr {
 		if guiComposerWindow == h {
 			guiComposerWindow = 0
 		}
+		if guiComposerFooter == h {
+			guiComposerFooter = 0
+		}
 	case 0x14:
 		// This custom background is fully drawn during WM_PAINT. Standard
 		// EDIT children are allowed to erase normally inside the system buffer.
@@ -60,7 +77,11 @@ func composerPanelProc(h uintptr, m uint32, w, l uintptr) uintptr {
 		var ps paintStruct
 		dc := call(user.NewProc("BeginPaint"), h, uintptr(unsafe.Pointer(&ps)))
 		if dc != 0 {
-			paintComposerSurfaceOffset(dc, -318, -currentComposerLayout().Top)
+			if h == guiComposerFooter {
+				paintComposerFooterOffset(dc, -318, -currentComposerLayout().FooterTop)
+			} else {
+				paintComposerSurfaceOffset(dc, -318, -currentComposerLayout().Top)
+			}
 			call(user.NewProc("EndPaint"), h, uintptr(unsafe.Pointer(&ps)))
 		}
 		return 0
@@ -121,7 +142,8 @@ func positionComposerWindows(items []composerPlacement) {
 func resizeComposerPanel(g composerGeometry) {
 	positionComposerWindows([]composerPlacement{
 		{126, [4]int{334, 74, guiWidth - 350, g.ListHeight}},
-		{composerPanelID, [4]int{318, g.Top, guiWidth - 318, guiHeight - g.Top}},
+		{composerPanelID, [4]int{318, g.Top, guiWidth - 318, g.FooterTop - g.Top}},
+		{composerFooterID, [4]int{318, g.FooterTop, guiWidth - 318, composerFooterHeight}},
 	})
 	items := []composerPlacement{
 		{121, [4]int{342, g.Top + 9, 80, 27}},
@@ -133,6 +155,8 @@ func resizeComposerPanel(g composerGeometry) {
 		p := &items[i].position
 		p[0], p[1] = composerLocalPosition(items[i].id, p[0], p[1])
 	}
-	// All items in each positioning batch share a parent.
-	positionComposerWindows(items)
+	// Toolbar/edit share the resizing pane. Send belongs to the fixed footer;
+	// each native positioning batch must contain siblings only.
+	positionComposerWindows(items[:3])
+	positionComposerWindows(items[3:])
 }

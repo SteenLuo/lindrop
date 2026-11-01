@@ -3,7 +3,10 @@ package main
 // All coordinates are logical pixels. Painting and native controls share them.
 type composerGeometry struct {
 	Top, ListHeight, TextTop, TextHeight, PreviewTop int
+	FooterTop                                        int
 }
+
+const composerFooterHeight = 45
 
 func composerLayout(height, requested, pictures int) composerGeometry {
 	preview := 0
@@ -24,5 +27,5 @@ func composerLayout(height, requested, pictures int) composerGeometry {
 		requested = maximum
 	}
 	top := height - 89 - requested - preview
-	return composerGeometry{top, top - 74, top + 44 + preview, requested, top + 41}
+	return composerGeometry{top, top - 74, top + 44 + preview, requested, top + 41, height - composerFooterHeight}
 }
