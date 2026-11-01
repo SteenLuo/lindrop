@@ -211,8 +211,10 @@ func resizeChatComposer(requested int) bool {
 	call(user.NewProc("RedrawWindow"), guiMain, uintptr(unsafe.Pointer(&changed)), 0, 0x1|0x4|0x40)
 	if guiComposerWindow != 0 {
 		// ERASE is necessary for the native EDIT. WS_EX_COMPOSITED makes
-		// background + descendants appear as a complete frame.
-		call(user.NewProc("RedrawWindow"), guiComposerWindow, 0, 0, 0x1|0x4|0x80|0x400)
+		// background + descendants appear as a complete frame. Finish this
+		// one small subtree at the coalesced cadence so moved valid bits cannot
+		// be presented before the resized scrollbar is painted.
+		call(user.NewProc("RedrawWindow"), guiComposerWindow, 0, 0, 0x1|0x4|0x80|0x100|0x400)
 	} else {
 		for _, id := range []int{121, 122, 170, 171, composerScrollbarID} {
 			if h := guiControls[id]; h != 0 {
