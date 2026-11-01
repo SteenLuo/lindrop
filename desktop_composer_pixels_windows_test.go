@@ -85,8 +85,13 @@ func checkPresentedFooter(frame *image.NRGBA) error {
 // printing controls into a fresh bitmap (which would conceal stale pixels).
 func captureComposerFrame() (*image.NRGBA, error) {
 	r := chatClient(guiMain)
-	w, h := int(r.R), int(r.B)
+	return captureComposerRegion(r)
+}
+
+func captureComposerRegion(r rect) (*image.NRGBA, error) {
+	w, h := int(r.R-r.L), int(r.B-r.T)
 	var origin point
+	origin.X, origin.Y = r.L, r.T
 	call(user.NewProc("ClientToScreen"), guiMain, uintptr(unsafe.Pointer(&origin)))
 	screen := call(user.NewProc("GetDC"), 0)
 	defer call(user.NewProc("ReleaseDC"), 0, screen)
@@ -325,6 +330,10 @@ func TestDesktopComposerPresentedPixelFrames(t *testing.T) {
 		}
 		failure = onUI(func() error { sampleOnline = true; refreshGUI(); return nil })
 		if failure != nil {
+			result <- failure
+			return
+		}
+		if failure = runComposerScrollbarProfile(t, onUI); failure != nil {
 			result <- failure
 			return
 		}

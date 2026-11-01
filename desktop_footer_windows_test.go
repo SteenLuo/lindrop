@@ -9,6 +9,21 @@ import (
 var footerProbeOriginal = map[uintptr]uintptr{}
 var footerProbeMoves int
 
+type composerScrollbarInfo struct {
+	Size                                        uint32
+	Rect                                        rect
+	LineButton, ThumbTop, ThumbBottom, Reserved int32
+	State                                       [6]uint32
+}
+
+func composerScrollbarBounds(h uintptr) (rect, bool) {
+	s := composerScrollbarInfo{}
+	s.Size = uint32(unsafe.Sizeof(s))
+	object := int32(-5) // OBJID_VSCROLL
+	ok := call(user.NewProc("GetScrollBarInfo"), h, uintptr(object), uintptr(unsafe.Pointer(&s))) != 0
+	return s.Rect, ok
+}
+
 func footerProbeProc(h uintptr, m uint32, w, l uintptr) uintptr {
 	if m == 0x47 {
 		footerProbeMoves++
@@ -73,8 +88,18 @@ func TestComposerFooterDoesNotBelongToResizableInputPane(t *testing.T) {
 			footerProbeOriginal[handle] = setWindowProcedure(handle, syscall.NewCallback(footerProbeProc))
 		}
 		footerProbeMoves = 0
-		for _, height := range []int{64, 96, 180, 260, 96} {
+		scrollBottom := int32(0)
+		for _, height := range []int{64, 65, 66, 67, 80, 96, 180, 260, 96} {
 			resizeChatComposer(height)
+			scroll, ok := composerScrollbarBounds(guiControls[170])
+			if !ok {
+				t.Fatal("native edit scrollbar geometry unavailable")
+			}
+			if scrollBottom == 0 {
+				scrollBottom = scroll.B
+			} else if scroll.B != scrollBottom {
+				t.Fatalf("input scrollbar bottom jumps during resize: scale=%g height=%d bottom=%d want=%d client=%+v", scale, height, scroll.B, scrollBottom, chatClient(guiControls[170]))
+			}
 			var now rect
 			call(user.NewProc("GetWindowRect"), button, uintptr(unsafe.Pointer(&now)))
 			if now != anchored || footerProbeMoves != 0 {
