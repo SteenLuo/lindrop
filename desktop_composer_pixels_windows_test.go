@@ -175,7 +175,7 @@ func TestDesktopComposerPresentedPixelFrames(t *testing.T) {
 				return
 			}
 		}
-		result <- nil
+		result <- runComposerDragProfile(t, onUI)
 	}()
 	runDesktop(n)
 	if err = <-result; err != nil {
