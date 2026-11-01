@@ -173,7 +173,8 @@ func layout() {
 	switch guiPage {
 	case 0:
 		switchChatDraft(guiSelected)
-		move(126, 334, 74, w-350, h-212)
+		g := currentComposerLayout()
+		move(126, 334, 74, w-350, g.ListHeight)
 		if chatLayoutWidth != chatListWidth() {
 			refreshChatList(guiAllTasks)
 		}
@@ -184,9 +185,9 @@ func layout() {
 				msg(guiControls[126], 0x1a0, uintptr(i), height)
 			}
 		}
-		move(121, 342, h-129, 80, 27)
-		move(122, 432, h-129, 80, 27)
-		move(170, 343, h-94, w-370, 49)
+		move(121, 342, g.Top+9, 80, 27)
+		move(122, 432, g.Top+9, 80, 27)
+		move(170, 343, g.TextTop, w-370, g.TextHeight)
 		move(171, w-103, h-36, 78, 29)
 		for _, id := range []int{121, 122, 170, 171} {
 			visible(id, true)
@@ -991,6 +992,7 @@ func runDesktop(n *Node) {
 		defer call(oleDrag.NewProc("OleUninitialize"))
 	}
 	guiNode = n
+	defer closeChatComposer()
 	vectorStart()
 	defer func() {
 		if vectorToken != 0 {

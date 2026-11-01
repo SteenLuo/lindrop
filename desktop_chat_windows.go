@@ -90,15 +90,29 @@ func switchChatDraft(peer string) {
 }
 
 func createChatComposer() {
-	h := themedControl("EDIT", "", 170, 0x4|0x40|0x1000)
+	h := themedControl("EDIT", "", 170, 0x4|0x40|0x1000|0x00200000)
 	msg(h, 0xc5, maxTextBytes, 0)
-	cue(170, "输入文字，或将文件拖到此窗口")
+	cue(170, "输入文字、粘贴截图，或拖入文件")
 	acceptDesktopDrops(h)
 	chatComposeProc = setWindowProcedure(h, syscall.NewCallback(chatEditProc))
 	themedControl("BUTTON", "发送", 171, 0)
 }
 
 func chatEditProc(hwnd uintptr, m uint32, w, l uintptr) uintptr {
+	if m == 0x302 { // WM_PASTE, including the native edit context menu.
+		if pasteChatScreenshot() {
+			return 0
+		}
+	}
+	if m == 0x100 && (w == 'V' && int16(call(user.NewProc("GetKeyState"), 0x11)) < 0 || w == 0x2d && int16(call(user.NewProc("GetKeyState"), 0x10)) < 0) {
+		if !pasteChatScreenshot() {
+			call(user.NewProc("CallWindowProcW"), chatComposeProc, hwnd, 0x302, 0, 0)
+		}
+		return 0
+	}
+	if m == 0x102 && w == 22 { // Ctrl+V's translated character was handled above.
+		return 0
+	}
 	if m == wmDropFiles {
 		postMessage.Call(guiMain, wmDropFiles, w, 0)
 		return 0
@@ -132,31 +146,50 @@ func sendChatText() {
 		return
 	}
 	body := text(guiControls[170])
-	if e := validateText(body); e != nil {
-		showError(e.Error())
+	pictures := append([]draftPicture(nil), chatPictures[d.ID]...)
+	if chatPicturePending[d.ID] > 0 {
+		composerFeedback("截图尚在准备，请稍后发送")
 		return
 	}
+	if strings.TrimSpace(body) != "" || len(pictures) == 0 {
+		if e := validateText(body); e != nil {
+			composerFeedback(e.Error())
+			return
+		}
+	}
 	chatSending = true
+	for _, p := range pictures {
+		chatSendingPictures[p.ID] = true
+	}
 	enabled(171, false)
 	go func() {
-		id, e := guiNode.SendText(body, d.ID)
+		id, sent, e := sendComposerContent(guiNode, body, d.ID, pictures)
 		queue(func() {
 			chatSending = false
-			if e != nil {
-				showError(e.Error())
-			} else {
+			for _, p := range pictures {
+				delete(chatSendingPictures, p.ID)
+			}
+			for _, pictureID := range sent {
+				chatPictures[d.ID] = withoutDraftPicture(chatPictures[d.ID], pictureID)
+			}
+			if id != "" {
 				chatTextCache[id] = body
+			}
+			if id != "" || e == nil {
 				if chatDraftDevice == d.ID && text(guiControls[170]) == body {
 					set(guiControls[170], "")
 					chatDrafts[d.ID] = ""
 				} else if chatDraftDevice != d.ID && chatDrafts[d.ID] == body {
 					chatDrafts[d.ID] = ""
 				}
-				set(guiControls[190], "文字已发送")
+			}
+			if e != nil {
+				showError(e.Error())
+			} else {
+				set(guiControls[190], "内容已发送")
 			}
 			refreshGUI()
-			updateContext()
-			invalidate(guiMain)
+			layout()
 		})
 	}()
 }
@@ -792,6 +825,7 @@ func scrollChatBottom() {
 
 func paintChatScene(dc uintptr) {
 	x, w, h := 318, guiWidth-318, guiHeight
+	g := currentComposerLayout()
 	fill(dc, rct(x, 0, w, 66), paper)
 	stroke(dc, x, 65, guiWidth, 65, lineColor, 1)
 	d, ok := currentDevice()
@@ -803,12 +837,14 @@ func paintChatScene(dc uintptr) {
 	label(dc, title, x+28, 11, w-56, 26, ink, guiTitle)
 	label(dc, detail, x+28, 37, w-56, 18, muted, guiSmall)
 	if len(guiTasks) == 0 {
-		paintEmpty(dc, x+16, 74, w-32, h-212, "transfer", "发一段文字，或分享一份文件", "对方发来的在左边，你发出的在右边。")
+		paintEmpty(dc, x+16, 74, w-32, g.ListHeight, "transfer", "发一段文字，或分享一份文件", "对方发来的在左边，你发出的在右边。")
 	}
-	fill(dc, rct(x, h-138, w, 138), paper)
-	stroke(dc, x, h-138, guiWidth, h-138, lineColor, 1)
-	label(dc, "拖入发送 · 文件可拖出复制", x+232, h-128, w-260, 20, muted, guiTiny)
-	hint := "Enter 换行 · Ctrl + Enter 发送 · 拖动选择文字"
+	fill(dc, rct(x, g.Top, w, h-g.Top), paper)
+	stroke(dc, x, g.Top, guiWidth, g.Top, lineColor, 1)
+	stroke(dc, x+w/2-18, g.Top+3, x+w/2+18, g.Top+3, lineColor, 2)
+	label(dc, "拖动上沿调整输入区", x+232, g.Top+10, w-260, 20, muted, guiTiny)
+	paintComposerPictures(dc)
+	hint := "Enter 换行 · Ctrl + Enter 发送 · Ctrl + V 粘贴截图"
 	if time.Now().Before(chatFeedbackUntil) {
 		hint = chatFeedback
 	}

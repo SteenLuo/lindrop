@@ -515,7 +515,13 @@ func drawText(dc uintptr, s string, r rect, clr uintptr, font uintptr) {
 	user.NewProc("DrawTextW").Call(dc, uintptr(unsafe.Pointer(wp(s))), ^uintptr(0), uintptr(unsafe.Pointer(&r)), 0x20|0x800|0x4)
 }
 func mainProc(hwnd uintptr, message uint32, w, l uintptr) uintptr {
+	if composerMouse(hwnd, message, w, l) {
+		return 1
+	}
 	switch message {
+	case wmPreparedScreenshot:
+		receivePreparedScreenshots()
+		return 0
 	case wmDropFiles:
 		desktopDrop(w)
 		return 0

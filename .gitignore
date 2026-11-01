@@ -20,6 +20,7 @@ current-node.json
 .env.*
 .ui-assets/
 text-outbox/
+image-outbox/
 LinDropNode/
 LinDrop/
 .邻传未完成/
