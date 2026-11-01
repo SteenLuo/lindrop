@@ -116,24 +116,37 @@ func TestDesktopComposerPresentedPixelFrames(t *testing.T) {
 	go func() {
 		<-created
 		time.Sleep(200 * time.Millisecond)
-		queue(func() {
-			defer destroyWindow.Call(guiMain)
+		onUI := func(fn func() error) error {
+			done := make(chan error, 1)
+			queue(func() { done <- fn() })
+			return <-done
+		}
+		defer queue(func() { chatResizeActive = false; destroyWindow.Call(guiMain) })
+		failure := onUI(func() error {
 			call(user.NewProc("SetForegroundWindow"), guiMain)
-			call(user.NewProc("SetFocus"), guiControls[170])
-			call(user.NewProc("HideCaret"), guiControls[170])
+			call(user.NewProc("SetFocus"), guiMain)
+			chatResizeActive = true
 			call(user.NewProc("RedrawWindow"), guiMain, 0, 0, 0x1|0x4|0x80|0x100|0x400)
-			for step, height := range []int{250, 64, 260, 96, 230, 64, 250, 120} {
-				resizeChatComposer(height)
-				// Honor only the update regions left by the real resize path.
-				// Never request an additional erase that could repair the bug.
-				call(user.NewProc("UpdateWindow"), guiMain)
-				for _, id := range []int{126, 121, 122, 170, 171} {
-					call(user.NewProc("UpdateWindow"), guiControls[id])
-				}
+			return nil
+		})
+		if failure != nil {
+			result <- failure
+			return
+		}
+		for step, height := range []int{250, 64, 260, 96, 230, 64, 250, 120} {
+			failure = onUI(func() error { resizeChatComposer(height); return nil })
+			if failure != nil {
+				result <- failure
+				return
+			}
+			// Return to the real application message loop between motion and
+			// capture. Printing/updating controls here would repair stale pixels;
+			// blocking the UI for the whole loop would capture an old DWM frame.
+			time.Sleep(45 * time.Millisecond)
+			failure = onUI(func() error {
 				frame, e := captureComposerFrame()
 				if e != nil {
-					result <- e
-					return
+					return e
 				}
 				var p point
 				call(user.NewProc("MapWindowPoints"), guiControls[170], guiMain, uintptr(unsafe.Pointer(&p)), 1)
@@ -148,18 +161,21 @@ func TestDesktopComposerPresentedPixelFrames(t *testing.T) {
 				}
 				if bad > 0 {
 					saveComposerEvidence(frame, fmt.Sprintf("stale-frame-%02d", step))
-					result <- fmt.Errorf("step %d height %d: %d stale pixels in blank native input", step, height, bad)
-					return
+					return fmt.Errorf("step %d height %d: %d stale pixels in blank native input", step, height, bad)
 				}
 				if step == 0 || step == 7 {
 					if e = saveComposerEvidence(frame, fmt.Sprintf("clean-frame-%02d", step)); e != nil {
-						result <- e
-						return
+						return e
 					}
 				}
+				return nil
+			})
+			if failure != nil {
+				result <- failure
+				return
 			}
-			result <- nil
-		})
+		}
+		result <- nil
 	}()
 	runDesktop(n)
 	if err = <-result; err != nil {
