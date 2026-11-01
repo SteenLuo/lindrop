@@ -9,7 +9,9 @@ func requestComposerResize(height int) {
 		return
 	}
 	if chatDragFrame.request(height) {
-		if call(user.NewProc("SetTimer"), guiMain, composerDragTimer, 15, 0) == 0 {
+		// USER_TIMER_MINIMUM: leave room for paint work without changing the
+		// machine's timer resolution or accumulating pointer events.
+		if call(user.NewProc("SetTimer"), guiMain, composerDragTimer, 10, 0) == 0 {
 			chatDragFrame.Armed = false
 			flushComposerResize()
 		}
