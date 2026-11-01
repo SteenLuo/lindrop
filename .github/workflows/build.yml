@@ -26,7 +26,7 @@ jobs:
       GOARCH: ${{ matrix.goarch }}
       CGO_ENABLED: '0'
       LINDROP_TEST_CLIPBOARD: '1'
-      LINDROP_RESIZE_EVIDENCE: '${{ runner.temp }}/lindrop-resize-evidence'
+      LINDROP_RESIZE_EVIDENCE: 'test-evidence/composer-resize'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -54,5 +54,5 @@ jobs:
         if: always()
         with:
           name: composer-pixel-evidence-${{ matrix.label }}
-          path: '${{ runner.temp }}/lindrop-resize-evidence'
+          path: test-evidence/composer-resize
           if-no-files-found: ignore

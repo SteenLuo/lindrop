@@ -4,6 +4,7 @@
 *.zip
 /dist/
 /coverage.out
+/test-evidence/
 
 # Local configuration, identities, sessions and diagnostics
 settings.json
