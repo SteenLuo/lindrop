@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"image"
+	"os"
+	"strings"
 	"testing"
 	"time"
 	"unsafe"
@@ -93,6 +95,55 @@ func runComposerScrollbarProfile(t *testing.T, onUI func(func() error) error) er
 	return onUI(func() error {
 		call(user.NewProc("SetWindowPos"), guiMain, 0, uintptr(original.L), uintptr(original.T), uintptr(original.R-original.L), uintptr(original.B-original.T), 0x4|0x10)
 		chatResizeActive = false
+		return nil
+	})
+}
+
+func runComposerNativeThumbDrag(onUI func(func() error) error) error {
+	if os.Getenv("GITHUB_ACTIONS") != "true" || os.Getenv("LINDROP_PIXEL_CHILD") != "1" {
+		return fmt.Errorf("native input interaction is restricted to the disposable remote fixture")
+	}
+	var start, end point
+	var selection uintptr
+	if err := onUI(func() error {
+		set(guiControls[170], strings.Repeat("a\r\n", 70000))
+		call(user.NewProc("SetFocus"), guiControls[170])
+		msg(guiControls[170], 0xb1, 2, 7)
+		selection = msg(guiControls[170], 0xb0, 0, 0)
+		s := composerScrollbarInfo{Size: uint32(unsafe.Sizeof(composerScrollbarInfo{}))}
+		object := int32(-4)
+		if call(user.NewProc("GetScrollBarInfo"), guiControls[composerScrollbarID], uintptr(object), uintptr(unsafe.Pointer(&s))) == 0 {
+			return fmt.Errorf("thumb geometry unavailable")
+		}
+		start = point{(s.Rect.L + s.Rect.R) / 2, s.Rect.T + (s.ThumbTop+s.ThumbBottom)/2}
+		end = point{start.X, s.Rect.B - s.LineButton - 2}
+		return nil
+	}); err != nil {
+		return err
+	}
+	time.Sleep(80 * time.Millisecond)
+	call(user.NewProc("SetCursorPos"), uintptr(start.X), uintptr(start.Y))
+	call(user.NewProc("mouse_event"), 2, 0, 0, 0, 0)
+	defer call(user.NewProc("mouse_event"), 4, 0, 0, 0, 0)
+	for i := int32(1); i <= 12; i++ {
+		call(user.NewProc("SetCursorPos"), uintptr(end.X), uintptr(start.Y+(end.Y-start.Y)*i/12))
+		time.Sleep(20 * time.Millisecond)
+	}
+	call(user.NewProc("mouse_event"), 4, 0, 0, 0, 0)
+	time.Sleep(80 * time.Millisecond)
+	return onUI(func() error {
+		first := int32(msg(guiControls[170], 0xce, 0, 0))
+		if first <= 65535 {
+			return fmt.Errorf("native thumb drag lost 32-bit position: %d", first)
+		}
+		if msg(guiControls[170], 0xb0, 0, 0) != selection {
+			return fmt.Errorf("native scrollbar drag changed text selection")
+		}
+		if call(user.NewProc("GetFocus")) != guiControls[170] {
+			return fmt.Errorf("scrollbar stole text input focus")
+		}
+		set(guiControls[170], "")
+		call(user.NewProc("SetFocus"), guiMain)
 		return nil
 	})
 }

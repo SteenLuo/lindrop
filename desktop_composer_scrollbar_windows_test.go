@@ -48,6 +48,11 @@ func checkComposerScrollbarNavigation(t *testing.T, edit uintptr) {
 	if msg(edit, 0xb0, 0, 0) != selection {
 		t.Fatal("scrolling changed text selection")
 	}
+	scrollComposerInput(6)
+	msg(bar, 0x20a, uintptr(uint32(0xff88)<<16), 0)
+	if got := read(); got.Pos == 0 || got.Pos != int32(msg(edit, 0xce, 0, 0)) {
+		t.Fatal("wheel over scrollbar did not move input text", got)
+	}
 	call(user.NewProc("MoveWindow"), edit, 0, 0, 500, 192, 0)
 	if got := read(); got.Page <= first.Page {
 		t.Fatal("scroll page did not follow input height", first, got)
@@ -62,5 +67,21 @@ func checkComposerScrollbarNavigation(t *testing.T, edit uintptr) {
 	set(edit, "")
 	if got := read(); got.Max != 0 || got.Pos != 0 {
 		t.Fatal("empty input kept a stale scroll range", got)
+	}
+	for i := 0; i < 3; i++ {
+		enabled(170, true)
+		updateComposerScrollbar()
+		if call(user.NewProc("IsWindowEnabled"), bar) != 0 {
+			t.Fatal("blank scrollbar was re-enabled by layout")
+		}
+	}
+	set(edit, strings.Repeat("line\r\n", 100))
+	enabled(170, false)
+	if call(user.NewProc("IsWindowEnabled"), bar) != 0 {
+		t.Fatal("disabled input left scrollbar enabled")
+	}
+	enabled(170, true)
+	if call(user.NewProc("IsWindowEnabled"), bar) == 0 {
+		t.Fatal("scrollable input did not restore scrollbar")
 	}
 }

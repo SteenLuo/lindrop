@@ -1,10 +1,14 @@
 package main
 
-import "unsafe"
+import (
+	"syscall"
+	"unsafe"
+)
 
 const composerScrollbarID = 482
 
 var composerWheelRemainder int64
+var composerScrollbarProc uintptr
 
 type composerScrollInfo struct {
 	Size, Mask uint32
@@ -18,6 +22,15 @@ func createComposerScrollbar() {
 	h := themedControl("SCROLLBAR", "", composerScrollbarID, 1) // SBS_VERT
 	style := call(user.NewProc("GetWindowLongW"), h, uintptr(0xfffffff0))
 	call(user.NewProc("SetWindowLongW"), h, uintptr(0xfffffff0), style&^0x10000)
+	composerScrollbarProc = setWindowProcedure(h, syscall.NewCallback(composerScrollbarWindowProc))
+}
+
+func composerScrollbarWindowProc(h uintptr, m uint32, w, l uintptr) uintptr {
+	if m == 0x20a {
+		scrollComposerWheel(w)
+		return 0
+	}
+	return call(user.NewProc("CallWindowProcW"), composerScrollbarProc, h, uintptr(m), w, l)
 }
 
 func composerScrollbarWidth() int {
@@ -68,6 +81,9 @@ func updateComposerScrollbar() {
 	if old.Min != next.Min || old.Max != next.Max || old.Page != next.Page || old.Pos != next.Pos {
 		call(user.NewProc("SetScrollInfo"), bar, 2, uintptr(unsafe.Pointer(&next)), 1)
 	}
+	// SIF_DISABLENOSCROLL may disable a blank scrollbar. Do not let ordinary
+	// device readiness re-enable it on every full window layout.
+	enabled(composerScrollbarID, call(user.NewProc("IsWindowEnabled"), h) != 0 && int64(next.Max)+1 > int64(next.Page))
 }
 
 func scrollComposerInput(w uintptr) {

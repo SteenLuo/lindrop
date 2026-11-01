@@ -142,7 +142,7 @@ func chatEditProc(hwnd uintptr, m uint32, w, l uintptr) uintptr {
 	} // EDIT owns Enter; Chinese IME confirmation never sends.
 	result := call(user.NewProc("CallWindowProcW"), chatComposeProc, hwnd, uintptr(m), w, l)
 	switch m {
-	case 5, 0xc, 0xb6, 0xb7, 0x115, 0x20a, 0x100, 0x102, 0x10f, 0x302, 0xc2, 0x304:
+	case 5, 0xa, 0xc, 0xb6, 0xb7, 0x115, 0x100, 0x102, 0x10f, 0x302, 0xc2, 0x304:
 		updateComposerScrollbar()
 	}
 	return result

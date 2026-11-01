@@ -214,7 +214,7 @@ func resizeChatComposer(requested int) bool {
 		// background + descendants appear as a complete frame.
 		call(user.NewProc("RedrawWindow"), guiComposerWindow, 0, 0, 0x1|0x4|0x80|0x400)
 	} else {
-		for _, id := range []int{121, 122, 170, 171} {
+		for _, id := range []int{121, 122, 170, 171, composerScrollbarID} {
 			if h := guiControls[id]; h != 0 {
 				call(user.NewProc("RedrawWindow"), h, 0, 0, 0x1|0x4|0x400)
 			}

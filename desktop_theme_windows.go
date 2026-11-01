@@ -287,7 +287,6 @@ func updateContext() {
 	enabled(122, ready)
 	enabled(159, ready)
 	enabled(170, ready)
-	enabled(composerScrollbarID, ready)
 	enabled(171, ready && !chatSending)
 
 	selected := int(int32(msg(guiControls[143], 0x188, 0, 0)))

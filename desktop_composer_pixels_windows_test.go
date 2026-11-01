@@ -356,6 +356,10 @@ func TestDesktopComposerPresentedPixelFrames(t *testing.T) {
 			result <- failure
 			return
 		}
+		if failure = runComposerNativeThumbDrag(onUI); failure != nil {
+			result <- failure
+			return
+		}
 		result <- runComposerDragProfile(t, onUI)
 	}()
 	runDesktop(n)
