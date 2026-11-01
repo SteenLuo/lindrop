@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"syscall"
 	"testing"
 	"time"
@@ -152,13 +153,16 @@ func TestDesktopComposerPresentedPixelFrames(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		cmd := exec.Command(exe, "-test.run=^TestDesktopComposerPresentedPixelFrames$", "-test.v", "-test.timeout=40s")
-		cmd.Env = append(os.Environ(), "LINDROP_PIXEL_CHILD=1")
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("presented frame fixture: %v\n%s", err, out)
+		for _, scale := range []string{"1", "2"} {
+			cmd := exec.Command(exe, "-test.run=^TestDesktopComposerPresentedPixelFrames$", "-test.v", "-test.timeout=60s")
+			cmd.Env = append(os.Environ(), "LINDROP_PIXEL_CHILD=1", "LINDROP_PIXEL_SCALE="+scale,
+				"LINDROP_RESIZE_EVIDENCE="+filepath.Join(os.Getenv("LINDROP_RESIZE_EVIDENCE"), "scale-"+scale))
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("presented frame fixture scale %s: %v\n%s", scale, err, out)
+			}
+			t.Log(string(out))
 		}
-		t.Log(string(out))
 		return
 	}
 	n, err := NewNode(t.TempDir(), "示例电脑", t.TempDir())
@@ -193,6 +197,21 @@ func TestDesktopComposerPresentedPixelFrames(t *testing.T) {
 		}
 		defer queue(func() { chatResizeActive = false; destroyWindow.Call(guiMain) })
 		failure := onUI(func() error {
+			if scale, err := strconv.ParseFloat(os.Getenv("LINDROP_PIXEL_SCALE"), 64); err == nil && scale > 1 {
+				guiScale = scale
+				guiPositions = map[int][4]int{}
+				chatWidths = map[rune]int{}
+				desktopFonts = map[[2]int]uintptr{}
+				guiFont = fontSize(13, 400)
+				guiSmall, guiTiny = fontSize(11, 400), fontSize(9, 400)
+				guiMedium, guiTitle = fontSize(13, 600), fontSize(18, 600)
+				for _, id := range []int{105, 170} {
+					msg(guiControls[id], 0x30, guiFont, 1)
+				}
+				work := desktopWorkArea()
+				call(user.NewProc("SetWindowPos"), guiMain, 0, uintptr(work.L+10), uintptr(work.T+10), uintptr(work.R-work.L-20), uintptr(work.B-work.T-20), 0x4|0x10)
+				layout()
+			}
 			call(user.NewProc("SetForegroundWindow"), guiMain)
 			call(user.NewProc("SetFocus"), guiMain)
 			chatResizeActive = true

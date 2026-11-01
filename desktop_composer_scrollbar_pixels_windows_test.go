@@ -14,28 +14,32 @@ import (
 // presented pixels throughout height changes, including intermediate frames.
 func runComposerScrollbarProfile(t *testing.T, onUI func(func() error) error) error {
 	t.Helper()
-	var area rect
+	var area, original rect
 	if err := onUI(func() error {
 		chatResizeActive = true
 		resizeChatComposer(160)
 		call(user.NewProc("SetFocus"), guiMain)
+		call(user.NewProc("GetWindowRect"), guiMain, uintptr(unsafe.Pointer(&original)))
 		return nil
 	}); err != nil {
 		return err
 	}
 	time.Sleep(75 * time.Millisecond)
 	var baseline *image.NRGBA
-	if err := onUI(func() error {
+	arrowFrame := func() (*image.NRGBA, error) {
 		scroll, ok := composerScrollbarBounds(guiControls[170])
 		if !ok {
-			return fmt.Errorf("native scrollbar unavailable")
+			return nil, fmt.Errorf("native scrollbar unavailable")
 		}
 		var origin point
 		call(user.NewProc("ClientToScreen"), guiMain, uintptr(unsafe.Pointer(&origin)))
 		width := scroll.R - scroll.L
 		area = rect{scroll.L - origin.X, scroll.B - origin.Y - width*3, scroll.R - origin.X, scroll.B - origin.Y + int32(sc(3))}
+		return captureComposerRegion(area)
+	}
+	if err := onUI(func() error {
 		var err error
-		baseline, err = captureComposerRegion(area)
+		baseline, err = arrowFrame()
 		if err == nil {
 			err = saveComposerEvidence(baseline, "scrollbar-baseline")
 		}
@@ -43,37 +47,52 @@ func runComposerScrollbarProfile(t *testing.T, onUI func(func() error) error) er
 	}); err != nil {
 		return err
 	}
-	changed := 0
-	for step := 0; step < 180; step++ {
-		height := 160 + step
-		if step >= 90 {
-			height = 250 - (step - 90)
-		}
-		if err := onUI(func() error { resizeChatComposer(height); return nil }); err != nil {
-			return err
-		}
-		time.Sleep(16 * time.Millisecond)
-		if err := onUI(func() error {
-			frame, err := captureComposerRegion(area)
-			if err != nil {
+	changed, total := 0, 0
+	for _, mode := range []string{"input", "window"} {
+		for step := 0; step < 120; step++ {
+			height := 96 + step
+			if step >= 60 {
+				height = 156 - (step - 60)
+			}
+			if err := onUI(func() error {
+				if mode == "input" {
+					resizeChatComposer(height)
+				} else {
+					delta := int32(120 - step)
+					call(user.NewProc("SetWindowPos"), guiMain, 0, uintptr(original.L), uintptr(original.T), uintptr(original.R-original.L), uintptr(original.B-original.T-delta), 0x4|0x10)
+				}
+				return nil
+			}); err != nil {
 				return err
 			}
-			if !bytes.Equal(frame.Pix, baseline.Pix) {
-				changed++
-				if changed <= 4 {
-					if err = saveComposerEvidence(frame, fmt.Sprintf("scrollbar-changed-%03d", step)); err != nil {
-						return err
+			time.Sleep(16 * time.Millisecond)
+			if err := onUI(func() error {
+				frame, err := arrowFrame()
+				if err != nil {
+					return err
+				}
+				if !bytes.Equal(frame.Pix, baseline.Pix) {
+					changed++
+					if changed <= 4 {
+						if err = saveComposerEvidence(frame, fmt.Sprintf("scrollbar-changed-%s-%03d", mode, step)); err != nil {
+							return err
+						}
 					}
 				}
+				return nil
+			}); err != nil {
+				return err
 			}
-			return nil
-		}); err != nil {
-			return err
+			total++
 		}
 	}
 	if changed != 0 {
-		return fmt.Errorf("fixed input scrollbar changed pixels during %d/180 resize frames", changed)
+		return fmt.Errorf("fixed input scrollbar changed pixels during %d/%d resize frames", changed, total)
 	}
-	t.Log("SCROLLBAR_STABILITY: 180 height changes, identical presented bottom-arrow pixels")
-	return onUI(func() error { chatResizeActive = false; return nil })
+	t.Logf("SCROLLBAR_STABILITY: %d input/window height changes, identical presented bottom-arrow pixels", total)
+	return onUI(func() error {
+		call(user.NewProc("SetWindowPos"), guiMain, 0, uintptr(original.L), uintptr(original.T), uintptr(original.R-original.L), uintptr(original.B-original.T), 0x4|0x10)
+		chatResizeActive = false
+		return nil
+	})
 }

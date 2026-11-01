@@ -35,7 +35,9 @@ jobs:
           cache: false
       - name: Test and build
         shell: pwsh
-        run: ./build.ps1 -Architecture $env:GOARCH
+        run: |
+          Set-DisplayResolution -Width 1920 -Height 1080 -Force
+          ./build.ps1 -Architecture $env:GOARCH
       - name: Package
         shell: pwsh
         run: |
