@@ -141,6 +141,7 @@ func control(class, label string, id int, style uint32) uintptr {
 	return h
 }
 func move(id, x, y, w, h int) {
+	x, y = composerLocalPosition(id, x, y)
 	if old, ok := guiPositions[id]; ok && old == [4]int{x, y, w, h} {
 		return
 	}

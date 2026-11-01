@@ -90,12 +90,14 @@ func switchChatDraft(peer string) {
 }
 
 func createChatComposer() {
+	createComposerPanel()
 	h := themedControl("EDIT", "", 170, 0x4|0x40|0x1000|0x00200000)
 	msg(h, 0xc5, maxTextBytes, 0)
 	cue(170, "输入文字、粘贴截图，或拖入文件")
 	acceptDesktopDrops(h)
 	chatComposeProc = setWindowProcedure(h, syscall.NewCallback(chatEditProc))
 	themedControl("BUTTON", "发送", 171, 0)
+	attachComposerControls()
 }
 
 func chatEditProc(hwnd uintptr, m uint32, w, l uintptr) uintptr {
@@ -824,7 +826,7 @@ func scrollChatBottom() {
 }
 
 func paintChatScene(dc uintptr) {
-	x, w, h := 318, guiWidth-318, guiHeight
+	x, w := 318, guiWidth-318
 	g := currentComposerLayout()
 	fill(dc, rct(x, 0, w, 66), paper)
 	stroke(dc, x, 65, guiWidth, 65, lineColor, 1)
@@ -839,11 +841,24 @@ func paintChatScene(dc uintptr) {
 	if len(guiTasks) == 0 {
 		paintEmpty(dc, x+16, 74, w-32, g.ListHeight, "transfer", "发一段文字，或分享一份文件", "对方发来的在左边，你发出的在右边。")
 	}
-	fill(dc, rct(x, g.Top, w, h-g.Top), paper)
-	stroke(dc, x, g.Top, guiWidth, g.Top, lineColor, 1)
-	stroke(dc, x+w/2-18, g.Top+3, x+w/2+18, g.Top+3, lineColor, 2)
-	label(dc, "拖动上沿调整输入区", x+232, g.Top+10, w-260, 20, muted, guiTiny)
-	paintComposerPictures(dc)
+	if guiComposerWindow == 0 {
+		paintComposerSurface(dc)
+	}
+}
+
+func paintComposerSurface(dc uintptr) {
+	paintComposerSurfaceOffset(dc, 0, 0)
+}
+
+func paintComposerSurfaceOffset(dc uintptr, dx, dy int) {
+	x, w, h := 318+dx, guiWidth-318, guiHeight+dy
+	g := currentComposerLayout()
+	top := g.Top + dy
+	fill(dc, rct(x, top, w, h-top), paper)
+	stroke(dc, x, top, x+w, top, lineColor, 1)
+	stroke(dc, x+w/2-18, top+3, x+w/2+18, top+3, lineColor, 2)
+	label(dc, "拖动上沿调整输入区", x+232, top+10, w-260, 20, muted, guiTiny)
+	paintComposerPicturesOffset(dc, dx, dy)
 	hint := "Enter 换行 · Ctrl + Enter 发送 · Ctrl + V 粘贴截图"
 	if time.Now().Before(chatFeedbackUntil) {
 		hint = chatFeedback

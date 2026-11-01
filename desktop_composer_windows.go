@@ -34,6 +34,7 @@ func currentComposerLayout() composerGeometry {
 func composerFeedback(s string) {
 	chatFeedback, chatFeedbackUntil = s, time.Now().Add(6*time.Second)
 	invalidate(guiMain)
+	invalidate(guiComposerWindow)
 }
 
 func pasteChatScreenshot() bool {
@@ -148,9 +149,17 @@ func pictureDraftRect(index, count int) rect {
 }
 
 func paintComposerPictures(dc uintptr) {
+	paintComposerPicturesOffset(dc, 0, 0)
+}
+
+func paintComposerPicturesOffset(dc uintptr, dx, dy int) {
 	pictures := chatPictures[chatDraftDevice]
 	for i, p := range pictures {
 		r := pictureDraftRect(i, len(pictures))
+		r.L += int32(sc(dx))
+		r.R += int32(sc(dx))
+		r.T += int32(sc(dy))
+		r.B += int32(sc(dy))
 		rounded(dc, r, tint, lineColor, 7)
 		area := rect{r.L + int32(sc(3)), r.T + int32(sc(3)), r.R - int32(sc(3)), r.B - int32(sc(3))}
 		if !drawChatImage(dc, loadChatImage(p.Path), area) {
@@ -162,10 +171,8 @@ func paintComposerPictures(dc uintptr) {
 	}
 }
 
-// Resizing the composer is a local layout transaction. MoveWindow(..., TRUE)
-// would synchronously paint each child while the other children still occupied
-// their previous positions. Never route continuous splitter motion through the
-// full application layout or invalidate the unchanged device/header areas.
+// Resize only the two panes. Native controls repaint normally within their
+// composited parent; suppressing their background erasure leaves stale pixels.
 func resizeChatComposer(requested int) bool {
 	if requested < 64 {
 		requested = 64
@@ -176,46 +183,12 @@ func resizeChatComposer(requested int) bool {
 	if before == after {
 		return false
 	}
-	placements := []struct {
-		id       int
-		position [4]int
-	}{
-		{126, [4]int{334, 74, guiWidth - 350, after.ListHeight}},
-		{121, [4]int{342, after.Top + 9, 80, 27}},
-		{122, [4]int{432, after.Top + 9, 80, 27}},
-		{170, [4]int{343, after.TextTop, guiWidth - 370, after.TextHeight}},
-	}
 	v := chatViews[guiControls[126]]
 	redraw := false
 	if v != nil {
 		redraw, v.Redraw = v.Redraw, false
 	}
-	const flags = 0x4 | 0x8 | 0x10 | 0x100 // NOZORDER, NOREDRAW, NOACTIVATE, NOCOPYBITS.
-	batch := call(user.NewProc("BeginDeferWindowPos"), uintptr(len(placements)))
-	for _, item := range placements {
-		if batch == 0 {
-			break
-		}
-		if guiControls[item.id] == 0 {
-			continue
-		}
-		p := item.position
-		batch = call(user.NewProc("DeferWindowPos"), batch, guiControls[item.id], 0,
-			uintptr(sc(p[0])), uintptr(sc(p[1])), uintptr(sc(p[2])), uintptr(sc(p[3])), flags)
-	}
-	committed := batch != 0 && call(user.NewProc("EndDeferWindowPos"), batch) != 0
-	for _, item := range placements {
-		if guiControls[item.id] == 0 {
-			continue
-		}
-		p := item.position
-		if !committed {
-			// Still no immediate painting if the system cannot allocate a batch.
-			call(user.NewProc("SetWindowPos"), guiControls[item.id], 0,
-				uintptr(sc(p[0])), uintptr(sc(p[1])), uintptr(sc(p[2])), uintptr(sc(p[3])), flags)
-		}
-		guiPositions[item.id] = p
-	}
+	resizeComposerPanel(after)
 	if v != nil {
 		v.Redraw = redraw
 		if redraw {
@@ -227,15 +200,21 @@ func resizeChatComposer(requested int) bool {
 		top = after.Top
 	}
 	changed := rct(318, top-5, guiWidth-318, guiHeight-top+5)
-	// Invalidate only after all controls have their final geometry. NOERASE
-	// keeps the previous frame until the buffered paint replaces it.
-	call(user.NewProc("RedrawWindow"), guiMain, uintptr(unsafe.Pointer(&changed)), 0, 0x1|0x20|0x40)
-	for _, item := range placements {
-		if item.id == 126 && v != nil && !redraw {
-			continue
+	call(user.NewProc("RedrawWindow"), guiMain, uintptr(unsafe.Pointer(&changed)), 0, 0x1|0x4|0x40|0x100)
+	if guiComposerWindow != 0 {
+		// ERASE is necessary for the native EDIT. WS_EX_COMPOSITED makes
+		// background + descendants appear as a complete frame.
+		call(user.NewProc("RedrawWindow"), guiComposerWindow, 0, 0, 0x1|0x4|0x80|0x100|0x400)
+	} else {
+		for _, id := range []int{121, 122, 170, 171} {
+			if h := guiControls[id]; h != 0 {
+				call(user.NewProc("RedrawWindow"), h, 0, 0, 0x1|0x4|0x100|0x400)
+			}
 		}
-		if h := guiControls[item.id]; h != 0 {
-			call(user.NewProc("RedrawWindow"), h, 0, 0, 0x1|0x20|0x400)
+	}
+	if v == nil || redraw {
+		if h := guiControls[126]; h != 0 {
+			call(user.NewProc("RedrawWindow"), h, 0, 0, 0x1|0x20|0x100|0x400)
 		}
 	}
 	return true

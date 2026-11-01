@@ -21,6 +21,7 @@
 | `desktop_viewport_windows.go` | 对话像素视口、滚轮动画、可见行绘制及32MiB行缓存；设备与共享列表仍为LISTBOX |
 | `desktop_selection_windows.go` | 气泡原位选字、原文字偏移映射、跨行及跨绘制段选择，不创建临时EDIT |
 | `composer.go`、`desktop_composer_windows.go` | 输入区共用布局、拖动分隔线、按设备隔离图片草稿、缩略图及逐项提交 |
+| `desktop_composer_panel_windows.go` | 独立WS_EX_COMPOSITED输入面板、正常原生背景清理、父子窗口布局与消息转发；不对整个主窗口启用该样式 |
 | `screenshot.go`、`desktop_clipboard_windows.go` | 有界PNG/DIB解析、只读剪贴板快照、后台PNG保存及未发图片清理 |
 | `desktop_context_windows.go`、`desktop_location_windows.go`、`task_location.go` | 消息及托盘主题菜单、键盘与焦点收起；按历史实际路径打开目录及Shell文件选中 |
 | `desktop_text_windows.go` | 保留抗锯齿文字绘制，24MiB文字位图缓存与释放 |
