@@ -18,6 +18,7 @@ type chatViewport struct {
 	Rows            map[int]*chatRowRaster
 	Bytes           int
 	Clock           uint64
+	ClientHeight    int
 }
 type chatRowRaster struct {
 	DC, Bitmap, Old uintptr
@@ -266,7 +267,15 @@ func chatViewportProc(h uintptr, m uint32, w, l uintptr) uintptr {
 	case 5:
 		// Height changes do not change message pixels. Width/scale/row-height
 		// changes are checked lazily by raster(), which also bounds the cache.
-		v.scroll(h, v.Y, false)
+		height := int(chatClient(h).B)
+		y := v.Y
+		if v.ClientHeight > 0 {
+			y += float64(v.ClientHeight - height)
+		}
+		v.ClientHeight = height
+		// Keep the visible content's bottom edge anchored. At the end of the
+		// conversation this also keeps the latest message at the new bottom.
+		v.scroll(h, y, false)
 		return 0
 	case 0x14:
 		fillListBackground(h, w)

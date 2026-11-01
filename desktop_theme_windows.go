@@ -235,6 +235,9 @@ func layout() {
 	}
 	invalidate(guiMain)
 	invalidate(guiComposerFooter)
+	if guiComposerWindow != 0 {
+		call(user.NewProc("RedrawWindow"), guiComposerWindow, 0, 0, 0x1|0x4|0x80|0x400)
+	}
 }
 func taskAction(t Task) (int, string) {
 	if t.Status == "done" {

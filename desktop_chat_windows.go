@@ -722,10 +722,21 @@ func refreshChatList(all []Task) bool {
 	h := guiControls[126]
 	top := int(msg(h, 0x18e, 0, 0))
 	remainder := 0.0
+	bottomID := ""
+	bottomOffset := 0.0
 	if v := chatViews[h]; v != nil {
 		v.index()
 		if top < len(v.Heights) {
 			remainder = v.Y - float64(v.Tops[top])
+		}
+		bottom := v.Y + float64(chatClient(h).B)
+		i := v.at(int(bottom) - 1)
+		if i >= 0 && i < len(guiTasks) {
+			bottomID = guiTasks[i].ID
+			for i > 0 && guiTasks[i-1].ID == bottomID {
+				i--
+			}
+			bottomOffset = bottom - float64(v.Tops[i])
 		}
 	}
 	nearBottom := len(guiTasks) == 0
@@ -780,6 +791,8 @@ func refreshChatList(all []Task) bool {
 		chatKeepAnchor = ""
 	} else if changedDevice || nearBottom {
 		scrollChatBottom()
+	} else if bottomID != "" && restoreChatBottomMessage(h, bottomID, bottomOffset) {
+		// Reflow/task refresh preserves the historical message at the bottom.
 	} else if top < len(guiTasks) {
 		msg(h, 0x197, uintptr(top), 0)
 		if v := chatViews[h]; v != nil {
@@ -787,6 +800,30 @@ func refreshChatList(all []Task) bool {
 		}
 	}
 	return true
+}
+
+func restoreChatBottomMessage(h uintptr, id string, offset float64) bool {
+	v := chatViews[h]
+	if v == nil {
+		return false
+	}
+	v.index()
+	for i, t := range guiTasks {
+		if t.ID != id {
+			continue
+		}
+		end := i + 1
+		for end < len(guiTasks) && guiTasks[end].ID == id {
+			end++
+		}
+		length := float64(v.Tops[end] - v.Tops[i])
+		if offset > length {
+			offset = length
+		}
+		v.scroll(h, float64(v.Tops[i])+offset-float64(chatClient(h).B), false)
+		return true
+	}
+	return false
 }
 
 func refreshChatProgress(tasks []Task) {

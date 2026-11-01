@@ -33,6 +33,7 @@ func TestConversationHeightResizeKeepsRasterAndScroll(t *testing.T) {
 	old := call(gdi.NewProc("SelectObject"), dc, bitmap)
 	defer func() { call(gdi.NewProc("SelectObject"), dc, old); call(gdi.NewProc("DeleteObject"), bitmap) }()
 	v.scroll(h, 57, false)
+	bottom := v.Y + float64(chatClient(h).B)
 	row := v.raster(dc, 0, int(chatClient(h).R), v.Heights[0])
 	if row == nil {
 		t.Fatal("row raster")
@@ -42,8 +43,15 @@ func TestConversationHeightResizeKeepsRasterAndScroll(t *testing.T) {
 		if v.Rows[0] != row {
 			t.Fatal("height-only resize discarded unchanged message raster", height)
 		}
-		if v.Y != 57 || v.Target != 57 {
-			t.Fatal("height-only resize lost scroll offset", v.Y, v.Target)
+		if v.Y+float64(chatClient(h).B) != bottom || v.Target != v.Y {
+			t.Fatal("height-only resize moved visible bottom", v.Y, v.Target, bottom)
+		}
+	}
+	v.scroll(h, v.maximum(h), false)
+	for _, height := range []int{270, 340, 250, 300} {
+		call(user.NewProc("SetWindowPos"), h, 0, 0, 0, 620, uintptr(height), 0x2|0x4|0x8|0x10)
+		if v.Y != v.maximum(h) {
+			t.Fatal("latest conversation was covered instead of bottom anchored")
 		}
 	}
 	width := int(chatClient(h).R)
@@ -114,6 +122,7 @@ func TestComposerPanelPositionsAndNativeRedraw(t *testing.T) {
 	}
 	resizeComposerPanel(currentComposerLayout())
 	v.scroll(h, 57, false)
+	anchoredBottom := v.Y + float64(chatClient(h).B)
 	dc := call(gdi.NewProc("CreateCompatibleDC"), 0)
 	defer call(gdi.NewProc("DeleteDC"), dc)
 	bitmap := call(gdi.NewProc("CreateBitmap"), 620, 300, 1, 32, 0)
@@ -137,8 +146,8 @@ func TestComposerPanelPositionsAndNativeRedraw(t *testing.T) {
 		if resizeProbePositions != 1 {
 			t.Fatal("resize moved viewport more than once", resizeProbePositions)
 		}
-		if v.Rows[0] != row || v.Y != 57 {
-			t.Fatal("resize lost cache or scroll position")
+		if v.Rows[0] != row || v.Y+float64(chatClient(h).B) != anchoredBottom {
+			t.Fatal("resize lost cache or bottom position")
 		}
 		if int(chatClient(h).B) != g.ListHeight || guiPositions[170][3] != g.TextHeight || guiPositions[170][1] != g.TextTop-g.Top {
 			t.Fatal("child geometry does not match panel coordinates")
@@ -170,6 +179,33 @@ func TestComposerPanelPositionsAndNativeRedraw(t *testing.T) {
 	}
 	if call(user.NewProc("IsWindowVisible"), guiMain) != 0 {
 		t.Fatal("local test showed a window")
+	}
+}
+
+func TestConversationBottomMessageSurvivesRowRebuild(t *testing.T) {
+	h, v := viewportTestWindow(t)
+	id := guiTasks[8].ID
+	// A message can span multiple raster rows after a layout rebuild.
+	guiTasks = append(guiTasks[:9], append([]Task{guiTasks[8]}, guiTasks[9:]...)...)
+	v.Heights = append(v.Heights[:9], append([]int{70}, v.Heights[9:]...)...)
+	v.Heights[8] = 20
+	v.Dirty = true
+	v.index()
+	if !restoreChatBottomMessage(h, id, 60) || v.Y+float64(chatClient(h).B) != float64(v.Tops[8]+60) {
+		t.Fatal("bottom anchor was lost across message raster parts")
+	}
+	oldBottom := v.Y + float64(chatClient(h).B)
+	guiTasks = append([]Task{{ID: "inserted-before-history"}}, guiTasks...)
+	v.Heights = append([]int{99}, v.Heights...)
+	v.Dirty = true
+	if !restoreChatBottomMessage(h, id, 60) || v.Y+float64(chatClient(h).B) != oldBottom+99 {
+		t.Fatal("inserting above history changed the bottom message offset")
+	}
+	if restoreChatBottomMessage(h, "removed-message", 60) {
+		t.Fatal("missing bottom message must use the caller's fallback")
+	}
+	if !restoreChatBottomMessage(h, id, 1000) || v.Y+float64(chatClient(h).B) != float64(v.Tops[11]) {
+		t.Fatal("shorter message must clamp anchor to its end")
 	}
 }
 

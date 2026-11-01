@@ -18,6 +18,23 @@ import (
 var syscallDwmFlush = syscall.NewLazyDLL("dwmapi.dll").NewProc("DwmFlush")
 
 func checkPresentedFooter(frame *image.NRGBA) error {
+	// A correct footer must not conceal a stale/blank input toolbar after
+	// maximizing. Inspect the already presented native file button as well.
+	var tool point
+	call(user.NewProc("MapWindowPoints"), guiControls[121], guiMain, uintptr(unsafe.Pointer(&tool)), 1)
+	want := imagecolor.NRGBA{49, 95, 78, 255}
+	if call(user.NewProc("IsWindowEnabled"), guiControls[121]) == 0 {
+		want = imagecolor.NRGBA{173, 191, 177, 255}
+	} else if guiHover == 121 {
+		want = imagecolor.NRGBA{44, 86, 70, 255}
+	}
+	for y := int(tool.Y) + sc(12); y < int(tool.Y)+sc(15); y++ {
+		for x := int(tool.X) + sc(7); x < int(tool.X)+sc(10); x++ {
+			if frame.NRGBAAt(x, y) != want {
+				return fmt.Errorf("input toolbar missing/stale at %d,%d: got %v want %v", x, y, frame.NRGBAAt(x, y), want)
+			}
+		}
+	}
 	footer := chatClient(guiComposerFooter)
 	if int(footer.B) != sc(composerFooterHeight) {
 		return fmt.Errorf("footer height changed: %d", footer.B)
