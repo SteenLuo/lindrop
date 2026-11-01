@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"image"
+	"image/draw"
 	"os"
 	"strings"
 	"testing"
@@ -28,7 +29,9 @@ func runComposerScrollbarProfile(t *testing.T, onUI func(func() error) error) er
 	}
 	time.Sleep(75 * time.Millisecond)
 	var baseline *image.NRGBA
-	arrowFrame := func() (*image.NRGBA, error) {
+	var lastContext *image.NRGBA
+	buttonInset, insetKnown := 0, false
+	arrowFrame := func(windowResize bool) (*image.NRGBA, error) {
 		scroll, ok := composerScrollbarBounds(guiControls[170])
 		if !ok {
 			return nil, fmt.Errorf("native scrollbar unavailable")
@@ -37,11 +40,46 @@ func runComposerScrollbarProfile(t *testing.T, onUI func(func() error) error) er
 		call(user.NewProc("ClientToScreen"), guiMain, uintptr(unsafe.Pointer(&origin)))
 		width := scroll.R - scroll.L
 		area = rect{scroll.L - origin.X, scroll.B - origin.Y - width*3, scroll.R - origin.X, scroll.B - origin.Y + int32(sc(3))}
-		return captureComposerRegion(area)
+		var button point
+		call(user.NewProc("MapWindowPoints"), guiControls[171], guiMain, uintptr(unsafe.Pointer(&button)), 1)
+		buttonBottom := int(button.Y + chatClient(guiControls[171]).B)
+		context := rect{button.X + int32(sc(8)), area.T - int32(sc(8)), area.R, int32(buttonBottom + sc(4))}
+		frame, err := captureComposerRegion(context)
+		if err != nil {
+			return nil, err
+		}
+		lastContext = frame
+		lastGreen := -1
+		for y := 0; y < frame.Bounds().Dy(); y++ {
+			p := frame.NRGBAAt(0, y)
+			if p.R == 49 && p.G == 95 && p.B == 78 {
+				lastGreen = y + int(context.T)
+			}
+		}
+		if lastGreen < 0 {
+			return nil, fmt.Errorf("presented send-button anchor unavailable")
+		}
+		if !insetKnown {
+			buttonInset, insetKnown = lastGreen-buttonBottom, true
+		}
+		shift := 0
+		if windowResize {
+			// DWM can present a previous WHOLE window frame. Align to the send
+			// button in this same captured frame; still reject arrow-only jumps
+			// or double arrows. Splitter checks keep absolute screen anchoring.
+			shift = lastGreen - buttonBottom - buttonInset
+		}
+		crop := image.Rect(int(area.L-context.L), int(area.T-context.T)+shift, int(area.R-context.L), int(area.B-context.T)+shift)
+		if !crop.In(frame.Bounds()) {
+			return nil, fmt.Errorf("presented arrow outside capture: %v", crop)
+		}
+		out := image.NewNRGBA(image.Rect(0, 0, crop.Dx(), crop.Dy()))
+		draw.Draw(out, out.Bounds(), frame, crop.Min, draw.Src)
+		return out, nil
 	}
 	if err := onUI(func() error {
 		var err error
-		baseline, err = arrowFrame()
+		baseline, err = arrowFrame(false)
 		if err == nil {
 			err = saveComposerEvidence(baseline, "scrollbar-baseline")
 		}
@@ -69,7 +107,7 @@ func runComposerScrollbarProfile(t *testing.T, onUI func(func() error) error) er
 			}
 			time.Sleep(16 * time.Millisecond)
 			if err := onUI(func() error {
-				frame, err := arrowFrame()
+				frame, err := arrowFrame(mode == "window")
 				if err != nil {
 					return err
 				}
@@ -77,6 +115,9 @@ func runComposerScrollbarProfile(t *testing.T, onUI func(func() error) error) er
 					changed++
 					if changed <= 4 {
 						if err = saveComposerEvidence(frame, fmt.Sprintf("scrollbar-changed-%s-%03d", mode, step)); err != nil {
+							return err
+						}
+						if err = saveComposerEvidence(lastContext, fmt.Sprintf("scrollbar-context-%s-%03d", mode, step)); err != nil {
 							return err
 						}
 					}

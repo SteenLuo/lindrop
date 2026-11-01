@@ -236,7 +236,9 @@ func layout() {
 		invalidate(guiControls[id])
 	}
 	invalidate(guiMain)
-	invalidate(guiComposerFooter)
+	if guiComposerFooter != 0 {
+		call(user.NewProc("RedrawWindow"), guiComposerFooter, 0, 0, 0x1|0x4|0x80|0x100|0x400)
+	}
 	if guiComposerWindow != 0 {
 		// A full native window resize may present copied child pixels before
 		// queued paint runs. Finish this small input subtree as one frame.
