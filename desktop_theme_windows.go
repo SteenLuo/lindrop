@@ -238,7 +238,10 @@ func layout() {
 	invalidate(guiMain)
 	invalidate(guiComposerFooter)
 	if guiComposerWindow != 0 {
-		call(user.NewProc("RedrawWindow"), guiComposerWindow, 0, 0, 0x1|0x4|0x80|0x400)
+		// A full native window resize may present copied child pixels before
+		// queued paint runs. Finish this small input subtree as one frame.
+		// The splitter's coalesced fast path does not call layout().
+		call(user.NewProc("RedrawWindow"), guiComposerWindow, 0, 0, 0x1|0x4|0x80|0x100|0x400)
 	}
 }
 func taskAction(t Task) (int, string) {
