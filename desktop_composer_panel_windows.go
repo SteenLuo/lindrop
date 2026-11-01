@@ -37,7 +37,7 @@ func createComposerPanel() {
 }
 
 func attachComposerControls() {
-	for _, id := range []int{121, 122, 170, 171} {
+	for _, id := range []int{121, 122, 170, 171, composerScrollbarID} {
 		parent := guiComposerWindow
 		if id == 171 {
 			parent = guiComposerFooter
@@ -62,6 +62,19 @@ func composerLocalPosition(id, x, y int) (int, int) {
 
 func composerPanelProc(h uintptr, m uint32, w, l uintptr) uintptr {
 	switch m {
+	case 0x115:
+		if l == guiControls[composerScrollbarID] {
+			scrollComposerInput(w)
+			return 0
+		}
+	case 0x111:
+		if l == guiControls[170] {
+			switch (w >> 16) & 0xffff {
+			case 0x300, 0x400, 0x602: // EN_CHANGE, EN_UPDATE, EN_VSCROLL.
+				updateComposerScrollbar()
+			}
+		}
+		return msg(guiMain, m, w, l)
 	case 2:
 		if guiComposerWindow == h {
 			guiComposerWindow = 0
@@ -85,7 +98,7 @@ func composerPanelProc(h uintptr, m uint32, w, l uintptr) uintptr {
 			call(user.NewProc("EndPaint"), h, uintptr(unsafe.Pointer(&ps)))
 		}
 		return 0
-	case 0x111, 0x2b, 0x133, 0x138, wmDropFiles:
+	case 0x2b, 0x133, 0x138, wmDropFiles:
 		return msg(guiMain, m, w, l)
 	case 0x20:
 		if composerMouse(guiMain, m, w, l) {
@@ -148,7 +161,8 @@ func resizeComposerPanel(g composerGeometry) {
 	items := []composerPlacement{
 		{121, [4]int{342, g.Top + 9, 80, 27}},
 		{122, [4]int{432, g.Top + 9, 80, 27}},
-		{170, [4]int{343, g.TextTop, guiWidth - 370, g.TextHeight}},
+		{170, [4]int{343, g.TextTop, guiWidth - 370 - composerScrollbarWidth(), g.TextHeight}},
+		{composerScrollbarID, [4]int{guiWidth - 27 - composerScrollbarWidth(), g.TextTop, composerScrollbarWidth(), g.TextHeight}},
 		{171, [4]int{guiWidth - 103, guiHeight - 36, 78, 29}},
 	}
 	for i := range items {
@@ -157,6 +171,7 @@ func resizeComposerPanel(g composerGeometry) {
 	}
 	// Toolbar/edit share the resizing pane. Send belongs to the fixed footer;
 	// each native positioning batch must contain siblings only.
-	positionComposerWindows(items[:3])
-	positionComposerWindows(items[3:])
+	positionComposerWindows(items[:4])
+	positionComposerWindows(items[4:])
+	updateComposerScrollbar()
 }

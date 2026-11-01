@@ -191,9 +191,11 @@ func layout() {
 		}
 		move(121, 342, g.Top+9, 80, 27)
 		move(122, 432, g.Top+9, 80, 27)
-		move(170, 343, g.TextTop, w-370, g.TextHeight)
+		move(170, 343, g.TextTop, w-370-composerScrollbarWidth(), g.TextHeight)
+		move(composerScrollbarID, w-27-composerScrollbarWidth(), g.TextTop, composerScrollbarWidth(), g.TextHeight)
+		updateComposerScrollbar()
 		move(171, w-103, h-36, 78, 29)
-		for _, id := range []int{121, 122, 170, 171} {
+		for _, id := range []int{121, 122, 170, 171, composerScrollbarID} {
 			visible(id, true)
 		}
 	case 1:
@@ -285,6 +287,7 @@ func updateContext() {
 	enabled(122, ready)
 	enabled(159, ready)
 	enabled(170, ready)
+	enabled(composerScrollbarID, ready)
 	enabled(171, ready && !chatSending)
 
 	selected := int(int32(msg(guiControls[143], 0x188, 0, 0)))

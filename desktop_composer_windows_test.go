@@ -110,8 +110,8 @@ func TestComposerHiddenEditScrollPasteAndDeviceIsolation(t *testing.T) {
 	edit := guiControls[170]
 	call(user.NewProc("MoveWindow"), edit, 0, 0, 500, 96, 0)
 	style := call(user.NewProc("GetWindowLongW"), edit, uintptr(0xfffffff0))
-	if style&0x00200000 == 0 || style&4 == 0 || style&0x40 == 0 {
-		t.Fatal("input lacks multiline or vertical scroll")
+	if style&0x00200000 != 0 || style&4 == 0 || style&0x40 == 0 || guiControls[composerScrollbarID] == 0 {
+		t.Fatal("input must use multiline editing with a separate client scrollbar")
 	}
 	long := strings.Repeat("中文长文字😀 with wrapping content\r\n", 120)
 	set(edit, long)
@@ -119,6 +119,7 @@ func TestComposerHiddenEditScrollPasteAndDeviceIsolation(t *testing.T) {
 	if msg(edit, 0xce, 0, 0) == 0 || text(edit) != long {
 		t.Fatal("native edit did not scroll or changed text")
 	}
+	checkComposerScrollbarNavigation(t, edit)
 	set(edit, "")
 	chatDraftDevice = "A"
 	guiSelected = "A"

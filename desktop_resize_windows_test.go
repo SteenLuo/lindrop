@@ -69,7 +69,7 @@ func TestComposerPanelPositionsAndNativeRedraw(t *testing.T) {
 	oldAll, oldButtons, oldProc := guiAllControls, guiButtonProc, chatComposeProc
 	oldActive, oldFrame := chatResizeActive, chatDragFrame
 	oldControls := map[int]uintptr{}
-	for _, id := range []int{121, 122, 170, 171, composerPanelID, composerFooterID} {
+	for _, id := range []int{121, 122, 170, 171, composerPanelID, composerFooterID, composerScrollbarID} {
 		oldControls[id] = guiControls[id]
 	}
 	defer func() {
@@ -109,7 +109,7 @@ func TestComposerPanelPositionsAndNativeRedraw(t *testing.T) {
 	if ex&0x02010000 != 0x02010000 {
 		t.Fatal("composer lacks system buffering or dialog navigation")
 	}
-	for _, id := range []int{121, 122, 170} {
+	for _, id := range []int{121, 122, 170, composerScrollbarID} {
 		if call(user.NewProc("GetParent"), guiControls[id]) != guiComposerWindow {
 			t.Fatal("native input/tool not in composited subtree", id)
 		}

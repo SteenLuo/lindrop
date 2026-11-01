@@ -20,6 +20,9 @@ func composerScrollbarBounds(h uintptr) (rect, bool) {
 	s := composerScrollbarInfo{}
 	s.Size = uint32(unsafe.Sizeof(s))
 	object := int32(-5) // OBJID_VSCROLL
+	if bar := guiControls[composerScrollbarID]; h == guiControls[170] && call(user.NewProc("IsWindow"), bar) != 0 {
+		h, object = bar, -4 // OBJID_CLIENT for a standalone SCROLLBAR.
+	}
 	ok := call(user.NewProc("GetScrollBarInfo"), h, uintptr(object), uintptr(unsafe.Pointer(&s))) != 0
 	return s.Rect, ok
 }
@@ -38,7 +41,7 @@ func TestComposerFooterDoesNotBelongToResizableInputPane(t *testing.T) {
 	oldDraft, oldPictures := chatDraftDevice, chatPictures
 	oldFooter, oldScale := guiComposerFooter, guiScale
 	oldControls := map[int]uintptr{}
-	for _, id := range []int{121, 122, 170, 171, 480, 481} {
+	for _, id := range []int{121, 122, 170, 171, 480, 481, composerScrollbarID} {
 		oldControls[id] = guiControls[id]
 	}
 	defer func() {

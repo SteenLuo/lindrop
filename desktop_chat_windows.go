@@ -91,16 +91,21 @@ func switchChatDraft(peer string) {
 
 func createChatComposer() {
 	createComposerPanel()
-	h := themedControl("EDIT", "", 170, 0x4|0x40|0x1000|0x00200000)
+	h := themedControl("EDIT", "", 170, 0x4|0x40|0x1000)
 	msg(h, 0xc5, maxTextBytes, 0)
 	cue(170, "输入文字、粘贴截图，或拖入文件")
 	acceptDesktopDrops(h)
 	chatComposeProc = setWindowProcedure(h, syscall.NewCallback(chatEditProc))
+	createComposerScrollbar()
 	themedControl("BUTTON", "发送", 171, 0)
 	attachComposerControls()
 }
 
 func chatEditProc(hwnd uintptr, m uint32, w, l uintptr) uintptr {
+	if m == 0x20a {
+		scrollComposerWheel(w)
+		return 0
+	}
 	if m == 0x302 { // WM_PASTE, including the native edit context menu.
 		if pasteChatScreenshot() {
 			return 0
@@ -135,7 +140,12 @@ func chatEditProc(hwnd uintptr, m uint32, w, l uintptr) uintptr {
 	if m == 0x87 {
 		return 4 | 0x80
 	} // EDIT owns Enter; Chinese IME confirmation never sends.
-	return call(user.NewProc("CallWindowProcW"), chatComposeProc, hwnd, uintptr(m), w, l)
+	result := call(user.NewProc("CallWindowProcW"), chatComposeProc, hwnd, uintptr(m), w, l)
+	switch m {
+	case 5, 0xc, 0xb6, 0xb7, 0x115, 0x20a, 0x100, 0x102, 0x10f, 0x302, 0xc2, 0x304:
+		updateComposerScrollbar()
+	}
+	return result
 }
 
 func sendChatText() {
