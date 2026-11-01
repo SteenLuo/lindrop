@@ -33,7 +33,7 @@ func runComposerScrollbarProfile(t *testing.T, onUI func(func() error) error) er
 		var origin point
 		call(user.NewProc("ClientToScreen"), guiMain, uintptr(unsafe.Pointer(&origin)))
 		width := scroll.R - scroll.L
-		area = rect{scroll.L - origin.X, scroll.B - origin.Y - width*3, scroll.R - origin.X, scroll.B - origin.Y + sc(3)}
+		area = rect{scroll.L - origin.X, scroll.B - origin.Y - width*3, scroll.R - origin.X, scroll.B - origin.Y + int32(sc(3))}
 		var err error
 		baseline, err = captureComposerRegion(area)
 		if err == nil {
