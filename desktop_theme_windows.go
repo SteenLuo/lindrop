@@ -285,7 +285,7 @@ func updateContext() {
 	enabled(144, ok && d.ID == guiNode.id && valid)
 }
 func refreshGUI() {
-	if guiNode == nil || guiDragging {
+	if guiNode == nil || guiDragging || chatResizeActive {
 		return
 	}
 	snapshot := guiNode.snapshot(true, WebClient{})

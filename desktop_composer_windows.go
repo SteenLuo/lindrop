@@ -162,6 +162,85 @@ func paintComposerPictures(dc uintptr) {
 	}
 }
 
+// Resizing the composer is a local layout transaction. MoveWindow(..., TRUE)
+// would synchronously paint each child while the other children still occupied
+// their previous positions. Never route continuous splitter motion through the
+// full application layout or invalidate the unchanged device/header areas.
+func resizeChatComposer(requested int) bool {
+	if requested < 64 {
+		requested = 64
+	}
+	before := currentComposerLayout()
+	chatComposerHeight = composerLayout(guiHeight, requested, len(chatPictures[chatDraftDevice])).TextHeight
+	after := currentComposerLayout()
+	if before == after {
+		return false
+	}
+	placements := []struct {
+		id       int
+		position [4]int
+	}{
+		{126, [4]int{334, 74, guiWidth - 350, after.ListHeight}},
+		{121, [4]int{342, after.Top + 9, 80, 27}},
+		{122, [4]int{432, after.Top + 9, 80, 27}},
+		{170, [4]int{343, after.TextTop, guiWidth - 370, after.TextHeight}},
+	}
+	v := chatViews[guiControls[126]]
+	redraw := false
+	if v != nil {
+		redraw, v.Redraw = v.Redraw, false
+	}
+	const flags = 0x4 | 0x8 | 0x10 | 0x100 // NOZORDER, NOREDRAW, NOACTIVATE, NOCOPYBITS.
+	batch := call(user.NewProc("BeginDeferWindowPos"), uintptr(len(placements)))
+	for _, item := range placements {
+		if batch == 0 {
+			break
+		}
+		if guiControls[item.id] == 0 {
+			continue
+		}
+		p := item.position
+		batch = call(user.NewProc("DeferWindowPos"), batch, guiControls[item.id], 0,
+			uintptr(sc(p[0])), uintptr(sc(p[1])), uintptr(sc(p[2])), uintptr(sc(p[3])), flags)
+	}
+	committed := batch != 0 && call(user.NewProc("EndDeferWindowPos"), batch) != 0
+	for _, item := range placements {
+		if guiControls[item.id] == 0 {
+			continue
+		}
+		p := item.position
+		if !committed {
+			// Still no immediate painting if the system cannot allocate a batch.
+			call(user.NewProc("SetWindowPos"), guiControls[item.id], 0,
+				uintptr(sc(p[0])), uintptr(sc(p[1])), uintptr(sc(p[2])), uintptr(sc(p[3])), flags)
+		}
+		guiPositions[item.id] = p
+	}
+	if v != nil {
+		v.Redraw = redraw
+		if redraw {
+			v.scrollbar(guiControls[126])
+		}
+	}
+	top := before.Top
+	if after.Top < top {
+		top = after.Top
+	}
+	changed := rct(318, top-5, guiWidth-318, guiHeight-top+5)
+	// Invalidate only after all controls have their final geometry. NOERASE
+	// keeps the previous frame until the buffered paint replaces it.
+	call(user.NewProc("RedrawWindow"), guiMain, uintptr(unsafe.Pointer(&changed)), 0, 0x1|0x20|0x40)
+	for _, item := range placements {
+		if item.id == 126 && v != nil && !redraw {
+			continue
+		}
+		if h := guiControls[item.id]; h != 0 {
+			call(user.NewProc("RedrawWindow"), h, 0, 0, 0x1|0x20|0x400)
+		}
+	}
+	return true
+}
+
 func composerMouse(hwnd uintptr, message uint32, w, l uintptr) bool {
 	if guiPage != 0 {
 		if chatResizeActive {
@@ -211,11 +290,7 @@ func composerMouse(hwnd uintptr, message uint32, w, l uintptr) bool {
 	case 0x200:
 		if chatResizeActive {
 			requested := chatResizeStartHeight + chatResizeStartY - y
-			if requested < 64 {
-				requested = 64
-			}
-			chatComposerHeight = composerLayout(guiHeight, requested, len(chatPictures[chatDraftDevice])).TextHeight
-			layout()
+			resizeChatComposer(requested)
 			return true
 		}
 	case 0x202:

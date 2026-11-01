@@ -250,7 +250,8 @@ func chatViewportProc(h uintptr, m uint32, w, l uintptr) uintptr {
 		}
 		return 0
 	case 5:
-		v.clearRows()
+		// Height changes do not change message pixels. Width/scale/row-height
+		// changes are checked lazily by raster(), which also bounds the cache.
 		v.scroll(h, v.Y, false)
 		return 0
 	case 0x14:
