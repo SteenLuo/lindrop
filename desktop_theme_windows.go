@@ -993,14 +993,35 @@ func newFont(size, weight int) uintptr {
 func setMinimum(l uintptr) {
 	info := (*struct{ Reserved, MaxSize, MaxPosition, MinTrack, MaxTrack point })(unsafe.Pointer(l))
 	w, h := sc(940), sc(650)
-	sw, sh := int(call(user.NewProc("GetSystemMetrics"), 0)), int(call(user.NewProc("GetSystemMetrics"), 1))
-	if w > sw-30 {
-		w = sw - 30
+	work := desktopWorkArea()
+	sw, sh := int(work.R-work.L), int(work.B-work.T)
+	if w > sw-40 {
+		w = sw - 40
 	}
-	if h > sh-60 {
-		h = sh - 60
+	if h > sh-40 {
+		h = sh - 40
 	}
 	info.MinTrack = point{int32(w), int32(h)}
+}
+
+func desktopWorkArea() rect {
+	var work rect
+	if call(user.NewProc("SystemParametersInfoW"), 0x30, 0, uintptr(unsafe.Pointer(&work)), 0) == 0 || work.R <= work.L || work.B <= work.T {
+		work = rect{0, 0, int32(call(user.NewProc("GetSystemMetrics"), 0)), int32(call(user.NewProc("GetSystemMetrics"), 1))}
+	}
+	return work
+}
+
+func initialDesktopFrame(work rect, width, height int) rect {
+	availableW, availableH := int(work.R-work.L), int(work.B-work.T)
+	if width > availableW-40 {
+		width = availableW - 40
+	}
+	if height > availableH-40 {
+		height = availableH - 40
+	}
+	x, y := int(work.L)+(availableW-width)/2, int(work.T)+(availableH-height)/2
+	return rect{int32(x), int32(y), int32(x + width), int32(y + height)}
 }
 
 func runDesktop(n *Node) {
@@ -1048,7 +1069,6 @@ func runDesktop(n *Node) {
 	}
 	wc := winClass{Size: uint32(unsafe.Sizeof(winClass{})), Proc: syscall.NewCallback(mainProc), Instance: instance, Icon: guiAppIcon, SmallIcon: guiSmallIcon, Cursor: call(user.NewProc("LoadCursorW"), 0, 32512), Background: guiBrush, Name: wp(desktopClass(n.dir))}
 	call(user.NewProc("RegisterClassExW"), uintptr(unsafe.Pointer(&wc)))
-	sw, sh := int(call(user.NewProc("GetSystemMetrics"), 0)), int(call(user.NewProc("GetSystemMetrics"), 1))
 	width, height := sc(1120), sc(770)
 	if guiClientWidth > 0 {
 		frame := rct(0, 0, guiClientWidth, guiClientHeight)
@@ -1056,13 +1076,8 @@ func runDesktop(n *Node) {
 		width = int(frame.R - frame.L)
 		height = int(frame.B - frame.T)
 	}
-	if width > sw-40 {
-		width = sw - 40
-	}
-	if height > sh-60 {
-		height = sh - 60
-	}
-	guiMain = call(createWindow, 0, uintptr(unsafe.Pointer(wc.Name)), uintptr(unsafe.Pointer(wp(guiWindowTitle))), 0x02cf0000, uintptr((sw-width)/2), uintptr((sh-height)/2), uintptr(width), uintptr(height), 0, 0, instance, 0)
+	initial := initialDesktopFrame(desktopWorkArea(), width, height)
+	guiMain = call(createWindow, 0, uintptr(unsafe.Pointer(wc.Name)), uintptr(unsafe.Pointer(wp(guiWindowTitle))), 0x02cf0000, uintptr(initial.L), uintptr(initial.T), uintptr(initial.R-initial.L), uintptr(initial.B-initial.T), 0, 0, instance, 0)
 	if guiMain == 0 {
 		showError("无法创建客户端窗口")
 		return

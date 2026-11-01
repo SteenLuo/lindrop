@@ -102,3 +102,12 @@ func TestComposerFooterDoesNotBelongToResizableInputPane(t *testing.T) {
 		}
 	}
 }
+
+func TestInitialDesktopFrameFitsWorkArea(t *testing.T) {
+	for _, work := range []rect{{0, 0, 1024, 720}, {80, 0, 1920, 1040}, {-1920, 40, 0, 1080}, {0, 0, 2560, 1344}} {
+		frame := initialDesktopFrame(work, 2400, 1400)
+		if frame.L < work.L+20 || frame.R > work.R-20 || frame.T < work.T+20 || frame.B > work.B-20 {
+			t.Fatal("initial window/footer overlaps taskbar or work-area edge", work, frame)
+		}
+	}
+}
