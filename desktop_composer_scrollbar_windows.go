@@ -23,6 +23,8 @@ func createComposerScrollbar() {
 	style := call(user.NewProc("GetWindowLongW"), h, uintptr(0xfffffff0))
 	call(user.NewProc("SetWindowLongW"), h, uintptr(0xfffffff0), style&^0x10000)
 	composerScrollbarProc = setWindowProcedure(h, syscall.NewCallback(composerScrollbarWindowProc))
+	createComposerDownArrow()
+	clipComposerScrollbar(0)
 }
 
 func composerScrollbarWindowProc(h uintptr, m uint32, w, l uintptr) uintptr {
@@ -84,6 +86,41 @@ func updateComposerScrollbar() {
 	// SIF_DISABLENOSCROLL may disable a blank scrollbar. Do not let ordinary
 	// device readiness re-enable it on every full window layout.
 	enabled(composerScrollbarID, call(user.NewProc("IsWindowEnabled"), h) != 0 && int64(next.Max)+1 > int64(next.Page))
+	enabled(composerDownArrowID, call(user.NewProc("IsWindowEnabled"), h) != 0 && int64(next.Max)+1 > int64(next.Page))
+}
+
+func composerArrowHeight() int {
+	pixels := call(user.NewProc("GetSystemMetrics"), 20) // SM_CYVSCROLL
+	if pixels == 0 {
+		pixels = 17
+	}
+	return int(float64(pixels)/guiScale + .999)
+}
+
+// The moving native track never owns any visible down-arrow pixels. Before a
+// shrink, intersect the old/new track extents so neither old nor new native
+// bottom button can become exposed between positioning operations.
+func clipComposerScrollbar(height int) {
+	h := guiControls[composerScrollbarID]
+	if h == 0 {
+		return
+	}
+	bottom := height - sc(composerArrowHeight())
+	if bottom < 0 {
+		bottom = 0
+	}
+	region := call(gdi.NewProc("CreateRectRgn"), 0, 0, uintptr(chatClient(h).R), uintptr(bottom))
+	if call(user.NewProc("SetWindowRgn"), h, region, 1) == 0 {
+		call(gdi.NewProc("DeleteObject"), region)
+	}
+}
+
+func prepareComposerScrollbarClip(height int) {
+	oldHeight := int(chatClient(guiControls[composerScrollbarID]).B)
+	if oldHeight < height {
+		height = oldHeight
+	}
+	clipComposerScrollbar(height)
 }
 
 func scrollComposerInput(w uintptr) {

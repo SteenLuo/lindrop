@@ -174,6 +174,7 @@ func layout() {
 	case 0:
 		switchChatDraft(guiSelected)
 		g := currentComposerLayout()
+		prepareComposerScrollbarClip(nativeComposerPosition(composerScrollbarID, [4]int{})[3])
 		move(composerPanelID, 318, g.Top, w-318, g.FooterTop-g.Top)
 		visible(composerPanelID, true)
 		move(composerFooterID, 318, g.FooterTop, w-318, composerFooterHeight)
@@ -193,9 +194,11 @@ func layout() {
 		move(122, 432, g.Top+9, 80, 27)
 		move(170, 343, g.TextTop, w-370-composerScrollbarWidth(), g.TextHeight)
 		move(composerScrollbarID, w-27-composerScrollbarWidth(), g.TextTop, composerScrollbarWidth(), g.TextHeight)
+		move(composerDownArrowID, w-27-composerScrollbarWidth(), g.FooterTop-composerArrowHeight(), composerScrollbarWidth(), composerArrowHeight())
+		clipComposerScrollbar(int(chatClient(guiControls[composerScrollbarID]).B))
 		updateComposerScrollbar()
 		move(171, w-103, h-36, 78, 29)
-		for _, id := range []int{121, 122, 170, 171, composerScrollbarID} {
+		for _, id := range []int{121, 122, 170, 171, composerScrollbarID, composerDownArrowID} {
 			visible(id, true)
 		}
 	case 1:

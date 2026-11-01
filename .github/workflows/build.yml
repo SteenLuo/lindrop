@@ -41,7 +41,7 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
-          $package = 'dist/LinDrop-0.7.12-windows-${{ matrix.label }}'
+          $package = 'dist/LinDrop-0.7.13-windows-${{ matrix.label }}'
           New-Item -ItemType Directory -Path $package | Out-Null
           Copy-Item -LiteralPath '邻传.exe','LICENSE','THIRD_PARTY_LICENSE.txt','GO-LICENSE.txt','SHA256-JS-LICENSE.txt' -Destination $package
           Copy-Item -LiteralPath docs/usage.txt -Destination "$package/使用说明.txt"
@@ -50,8 +50,8 @@ jobs:
           Compress-Archive -Path $package -DestinationPath "$package.zip"
       - uses: actions/upload-artifact@v4
         with:
-          name: LinDrop-0.7.12-windows-${{ matrix.label }}
-          path: dist/LinDrop-0.7.12-windows-${{ matrix.label }}.zip
+          name: LinDrop-0.7.13-windows-${{ matrix.label }}
+          path: dist/LinDrop-0.7.13-windows-${{ matrix.label }}.zip
       - uses: actions/upload-artifact@v4
         if: always()
         with:

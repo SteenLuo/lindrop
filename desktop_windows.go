@@ -142,11 +142,13 @@ func control(class, label string, id int, style uint32) uintptr {
 }
 func move(id, x, y, w, h int) {
 	x, y = composerLocalPosition(id, x, y)
-	if old, ok := guiPositions[id]; ok && old == [4]int{x, y, w, h} {
+	p := [4]int{x, y, w, h}
+	if !composerNeedsPosition(id, p) {
 		return
 	}
-	guiPositions[id] = [4]int{x, y, w, h}
-	call(user.NewProc("MoveWindow"), guiControls[id], uintptr(sc(x)), uintptr(sc(y)), uintptr(sc(w)), uintptr(sc(h)), 1)
+	guiPositions[id] = p
+	physical := nativeComposerPosition(id, p)
+	call(user.NewProc("MoveWindow"), guiControls[id], uintptr(physical[0]), uintptr(physical[1]), uintptr(physical[2]), uintptr(physical[3]), 1)
 }
 func cue(id int, s string) { msg(guiControls[id], 0x1501, 0, uintptr(unsafe.Pointer(wp(s)))) }
 func queue(fn func()) {

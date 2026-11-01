@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"image"
+	imagecolor "image/color"
 	"image/draw"
 	"os"
 	"strings"
@@ -30,6 +31,7 @@ func runComposerScrollbarProfile(t *testing.T, onUI func(func() error) error) er
 	time.Sleep(75 * time.Millisecond)
 	var baseline *image.NRGBA
 	var lastContext *image.NRGBA
+	var trackBackground []imagecolor.NRGBA
 	buttonInset, insetKnown := 0, false
 	arrowFrame := func(windowResize bool) (*image.NRGBA, error) {
 		scroll, ok := composerScrollbarBounds(guiControls[170])
@@ -43,7 +45,7 @@ func runComposerScrollbarProfile(t *testing.T, onUI func(func() error) error) er
 		var button point
 		call(user.NewProc("MapWindowPoints"), guiControls[171], guiMain, uintptr(unsafe.Pointer(&button)), 1)
 		buttonBottom := int(button.Y + chatClient(guiControls[171]).B)
-		context := rect{button.X + int32(sc(8)), area.T - int32(sc(8)), area.R, int32(buttonBottom + sc(4))}
+		context := rect{button.X + int32(sc(8)), scroll.T - origin.Y, area.R, int32(buttonBottom + sc(4))}
 		frame, err := captureComposerRegion(context)
 		if err != nil {
 			return nil, err
@@ -69,6 +71,23 @@ func runComposerScrollbarProfile(t *testing.T, onUI func(func() error) error) er
 			// or double arrows. Splitter checks keep absolute screen anchoring.
 			shift = lastGreen - buttonBottom - buttonInset
 		}
+		left := int(scroll.L - origin.X - context.L)
+		top := int(scroll.T-origin.Y-context.T) + shift
+		bottom := int(scroll.B-origin.Y-context.T) + shift
+		if trackBackground == nil {
+			trackBackground = make([]imagecolor.NRGBA, int(width))
+			for x := int(width) / 3; x < int(width)*2/3; x++ {
+				trackBackground[x] = frame.NRGBAAt(left+x, (top+bottom)/2)
+			}
+		}
+		for y := top + sc(composerArrowHeight()) + 3; y < bottom-sc(composerArrowHeight())-3; y++ {
+			for x := int(width) / 3; x < int(width)*2/3; x++ {
+				if frame.NRGBAAt(left+x, y) != trackBackground[x] {
+					saveComposerEvidence(frame, "scrollbar-track-ghost")
+					return nil, fmt.Errorf("blank scrollbar track contains stale glyph pixels at %d,%d", x, y)
+				}
+			}
+		}
 		crop := image.Rect(int(area.L-context.L), int(area.T-context.T)+shift, int(area.R-context.L), int(area.B-context.T)+shift)
 		if !crop.In(frame.Bounds()) {
 			return nil, fmt.Errorf("presented arrow outside capture: %v", crop)
@@ -93,6 +112,9 @@ func runComposerScrollbarProfile(t *testing.T, onUI func(func() error) error) er
 			height := 96 + step
 			if step >= 60 {
 				height = 156 - (step - 60)
+			}
+			if mode == "input" && step < 20 {
+				height = []int{64, 250, 96, 240, 64, 220, 80, 200, 96, 260}[step%10]
 			}
 			if err := onUI(func() error {
 				if mode == "input" {
@@ -144,13 +166,16 @@ func runComposerNativeThumbDrag(onUI func(func() error) error) error {
 	if os.Getenv("GITHUB_ACTIONS") != "true" || os.Getenv("LINDROP_PIXEL_CHILD") != "1" {
 		return fmt.Errorf("native input interaction is restricted to the disposable remote fixture")
 	}
-	var start, end point
+	var start, end, down point
 	var selection uintptr
 	if err := onUI(func() error {
 		set(guiControls[170], strings.Repeat("a\r\n", 70000))
 		call(user.NewProc("SetFocus"), guiControls[170])
 		msg(guiControls[170], 0xb1, 2, 7)
 		selection = msg(guiControls[170], 0xb0, 0, 0)
+		var downRect rect
+		call(user.NewProc("GetWindowRect"), guiControls[composerDownArrowID], uintptr(unsafe.Pointer(&downRect)))
+		down = point{(downRect.L + downRect.R) / 2, (downRect.T + downRect.B) / 2}
 		s := composerScrollbarInfo{Size: uint32(unsafe.Sizeof(composerScrollbarInfo{}))}
 		object := int32(-4)
 		if call(user.NewProc("GetScrollBarInfo"), guiControls[composerScrollbarID], uintptr(object), uintptr(unsafe.Pointer(&s))) == 0 {
@@ -163,6 +188,24 @@ func runComposerNativeThumbDrag(onUI func(func() error) error) error {
 		return err
 	}
 	time.Sleep(80 * time.Millisecond)
+	call(user.NewProc("SetCursorPos"), uintptr(down.X), uintptr(down.Y))
+	call(user.NewProc("mouse_event"), 2, 0, 0, 0, 0)
+	defer call(user.NewProc("mouse_event"), 4, 0, 0, 0, 0)
+	time.Sleep(450 * time.Millisecond)
+	call(user.NewProc("mouse_event"), 4, 0, 0, 0, 0)
+	time.Sleep(60 * time.Millisecond)
+	if err := onUI(func() error {
+		if msg(guiControls[170], 0xce, 0, 0) < 2 {
+			return fmt.Errorf("fixed down arrow did not repeat while held")
+		}
+		if msg(guiControls[170], 0xb0, 0, 0) != selection || call(user.NewProc("GetFocus")) != guiControls[170] {
+			return fmt.Errorf("fixed down arrow changed selection or focus")
+		}
+		scrollComposerInput(6)
+		return nil
+	}); err != nil {
+		return err
+	}
 	call(user.NewProc("SetCursorPos"), uintptr(start.X), uintptr(start.Y))
 	call(user.NewProc("mouse_event"), 2, 0, 0, 0, 0)
 	defer call(user.NewProc("mouse_event"), 4, 0, 0, 0, 0)

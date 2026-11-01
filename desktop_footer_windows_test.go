@@ -41,7 +41,7 @@ func TestComposerFooterDoesNotBelongToResizableInputPane(t *testing.T) {
 	oldDraft, oldPictures := chatDraftDevice, chatPictures
 	oldFooter, oldScale := guiComposerFooter, guiScale
 	oldControls := map[int]uintptr{}
-	for _, id := range []int{121, 122, 170, 171, 480, 481, composerScrollbarID} {
+	for _, id := range []int{121, 122, 170, 171, 480, 481, composerScrollbarID, composerDownArrowID} {
 		oldControls[id] = guiControls[id]
 	}
 	defer func() {
@@ -80,14 +80,20 @@ func TestComposerFooterDoesNotBelongToResizableInputPane(t *testing.T) {
 		t.Fatal("footer is not independently anchored to main client")
 	}
 	button := guiControls[171]
-	for _, scale := range []float64{1, 2} {
+	arrow := guiControls[composerDownArrowID]
+	if arrow == 0 || call(user.NewProc("GetParent"), arrow) != guiMain {
+		t.Fatal("down arrow must be independent of the moving input pane")
+	}
+	for _, scale := range []float64{1, 1.25, 1.5, 2} {
 		guiScale = scale
 		guiPositions = map[int][4]int{}
 		call(user.NewProc("SetWindowPos"), guiMain, 0, 0, 0, uintptr(sc(guiWidth)), uintptr(sc(guiHeight)), 0x4|0x10)
 		resizeComposerPanel(currentComposerLayout())
 		var anchored rect
 		call(user.NewProc("GetWindowRect"), button, uintptr(unsafe.Pointer(&anchored)))
-		for _, handle := range []uintptr{parent, button} {
+		var arrowAnchor rect
+		call(user.NewProc("GetWindowRect"), arrow, uintptr(unsafe.Pointer(&arrowAnchor)))
+		for _, handle := range []uintptr{parent, button, arrow} {
 			footerProbeOriginal[handle] = setWindowProcedure(handle, syscall.NewCallback(footerProbeProc))
 		}
 		footerProbeMoves = 0
@@ -102,6 +108,20 @@ func TestComposerFooterDoesNotBelongToResizableInputPane(t *testing.T) {
 				scrollBottom = scroll.B
 			} else if scroll.B != scrollBottom {
 				t.Fatalf("input scrollbar bottom jumps during resize: scale=%g height=%d bottom=%d want=%d client=%+v", scale, height, scroll.B, scrollBottom, chatClient(guiControls[170]))
+			}
+			var arrowNow rect
+			call(user.NewProc("GetWindowRect"), arrow, uintptr(unsafe.Pointer(&arrowNow)))
+			if arrowNow != arrowAnchor || arrowNow.B != scroll.B {
+				t.Fatal("bottom arrow moved with the input pane", scale, height, arrowNow, arrowAnchor)
+			}
+			bar := guiControls[composerScrollbarID]
+			region := call(gdi.NewProc("CreateRectRgn"), 0, 0, 0, 0)
+			kind := call(user.NewProc("GetWindowRgn"), bar, region)
+			bounds := chatClient(bar)
+			visible := call(gdi.NewProc("PtInRegion"), region, uintptr(bounds.R/2), uintptr(bounds.B-int32(sc(composerArrowHeight())/2)))
+			call(gdi.NewProc("DeleteObject"), region)
+			if kind == 0 || visible != 0 {
+				t.Fatal("moving native scrollbar still exposes a second down arrow")
 			}
 			var now rect
 			call(user.NewProc("GetWindowRect"), button, uintptr(unsafe.Pointer(&now)))

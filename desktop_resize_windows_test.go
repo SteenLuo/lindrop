@@ -69,7 +69,7 @@ func TestComposerPanelPositionsAndNativeRedraw(t *testing.T) {
 	oldAll, oldButtons, oldProc := guiAllControls, guiButtonProc, chatComposeProc
 	oldActive, oldFrame := chatResizeActive, chatDragFrame
 	oldControls := map[int]uintptr{}
-	for _, id := range []int{121, 122, 170, 171, composerPanelID, composerFooterID, composerScrollbarID} {
+	for _, id := range []int{121, 122, 170, 171, composerPanelID, composerFooterID, composerScrollbarID, composerDownArrowID} {
 		oldControls[id] = guiControls[id]
 	}
 	defer func() {

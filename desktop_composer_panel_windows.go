@@ -120,13 +120,49 @@ type composerPlacement struct {
 	position [4]int
 }
 
+func nativeComposerPosition(id int, p [4]int) [4]int {
+	result := [4]int{sc(p[0]), sc(p[1]), sc(p[2]), sc(p[3])}
+	if id != 170 && id != composerScrollbarID && id != composerDownArrowID {
+		return result
+	}
+	g := currentComposerLayout()
+	left, right := sc(343), sc(guiWidth-27-composerScrollbarWidth())
+	top, bottom := sc(g.TextTop), sc(g.FooterTop)
+	if id != 170 {
+		left, right = right, sc(guiWidth-27)
+	}
+	if id == composerDownArrowID {
+		top = bottom - sc(composerArrowHeight())
+	}
+	if guiComposerWindow != 0 && call(user.NewProc("GetParent"), guiControls[id]) == guiComposerWindow {
+		left, right = left-sc(318), right-sc(318)
+		top, bottom = top-sc(g.Top), bottom-sc(g.Top)
+	}
+	return [4]int{left, top, right - left, bottom - top}
+}
+
+func composerNeedsPosition(id int, p [4]int) bool {
+	if guiPositions[id] != p {
+		return true
+	}
+	if id != 170 && id != composerScrollbarID && id != composerDownArrowID {
+		return false
+	}
+	h := guiControls[id]
+	var r rect
+	call(user.NewProc("GetWindowRect"), h, uintptr(unsafe.Pointer(&r)))
+	origin := point{r.L, r.T}
+	call(user.NewProc("MapWindowPoints"), 0, call(user.NewProc("GetParent"), h), uintptr(unsafe.Pointer(&origin)), 1)
+	return [4]int{int(origin.X), int(origin.Y), int(r.R - r.L), int(r.B - r.T)} != nativeComposerPosition(id, p)
+}
+
 // Like mature native splitter implementations, use ordinary positioning and
 // let Windows retain/erase valid pixels. Do not discard valid pixels and then
 // suppress native control erasure with SWP_NOREDRAW/RDW_NOERASE.
 func positionComposerWindows(items []composerPlacement) {
 	changed := make([]composerPlacement, 0, len(items))
 	for _, item := range items {
-		if guiControls[item.id] != 0 && guiPositions[item.id] != item.position {
+		if guiControls[item.id] != 0 && composerNeedsPosition(item.id, item.position) {
 			changed = append(changed, item)
 		}
 	}
@@ -139,24 +175,26 @@ func positionComposerWindows(items []composerPlacement) {
 		if batch == 0 {
 			break
 		}
-		p := item.position
-		batch = call(user.NewProc("DeferWindowPos"), batch, guiControls[item.id], 0, uintptr(sc(p[0])), uintptr(sc(p[1])), uintptr(sc(p[2])), uintptr(sc(p[3])), flags)
+		p := nativeComposerPosition(item.id, item.position)
+		batch = call(user.NewProc("DeferWindowPos"), batch, guiControls[item.id], 0, uintptr(p[0]), uintptr(p[1]), uintptr(p[2]), uintptr(p[3]), flags)
 	}
 	committed := batch != 0 && call(user.NewProc("EndDeferWindowPos"), batch) != 0
 	for _, item := range changed {
-		p := item.position
+		p := nativeComposerPosition(item.id, item.position)
 		if !committed {
-			call(user.NewProc("SetWindowPos"), guiControls[item.id], 0, uintptr(sc(p[0])), uintptr(sc(p[1])), uintptr(sc(p[2])), uintptr(sc(p[3])), flags)
+			call(user.NewProc("SetWindowPos"), guiControls[item.id], 0, uintptr(p[0]), uintptr(p[1]), uintptr(p[2]), uintptr(p[3]), flags)
 		}
-		guiPositions[item.id] = p
+		guiPositions[item.id] = item.position
 	}
 }
 
 func resizeComposerPanel(g composerGeometry) {
+	prepareComposerScrollbarClip(nativeComposerPosition(composerScrollbarID, [4]int{})[3])
 	positionComposerWindows([]composerPlacement{
 		{126, [4]int{334, 74, guiWidth - 350, g.ListHeight}},
 		{composerPanelID, [4]int{318, g.Top, guiWidth - 318, g.FooterTop - g.Top}},
 		{composerFooterID, [4]int{318, g.FooterTop, guiWidth - 318, composerFooterHeight}},
+		{composerDownArrowID, [4]int{guiWidth - 27 - composerScrollbarWidth(), g.FooterTop - composerArrowHeight(), composerScrollbarWidth(), composerArrowHeight()}},
 	})
 	items := []composerPlacement{
 		{121, [4]int{342, g.Top + 9, 80, 27}},
@@ -173,5 +211,6 @@ func resizeComposerPanel(g composerGeometry) {
 	// each native positioning batch must contain siblings only.
 	positionComposerWindows(items[:4])
 	positionComposerWindows(items[4:])
+	clipComposerScrollbar(int(chatClient(guiControls[composerScrollbarID]).B))
 	updateComposerScrollbar()
 }
