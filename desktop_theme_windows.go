@@ -230,7 +230,7 @@ func layout() {
 	for id, show := range guiWant {
 		visible(id, show)
 	}
-	for _, id := range []int{201, 202, 203, 205, 210, 211, 212} {
+	for _, id := range []int{103, 201, 202, 203, 205, 210, 211, 212} {
 		invalidate(guiControls[id])
 	}
 	invalidate(guiMain)

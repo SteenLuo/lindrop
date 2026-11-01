@@ -18,6 +18,22 @@ import (
 var syscallDwmFlush = syscall.NewLazyDLL("dwmapi.dll").NewProc("DwmFlush")
 
 func checkPresentedFooter(frame *image.NRGBA) error {
+	var phone point
+	call(user.NewProc("MapWindowPoints"), guiControls[103], guiMain, uintptr(unsafe.Pointer(&phone)), 1)
+	// Moving the phone icon over the old settings position used to copy its
+	// pixels into this owner-drawn button. The margins must remain plain rail.
+	if guiHover != 103 {
+		for y := sc(2); y < sc(36); y++ {
+			for x := sc(2); x < sc(36); x++ {
+				if x >= sc(8) && x <= sc(30) && y >= sc(8) && y <= sc(30) {
+					continue
+				}
+				if got := frame.NRGBAAt(int(phone.X)+x, int(phone.Y)+y); got != (imagecolor.NRGBA{236, 240, 232, 255}) {
+					return fmt.Errorf("phone icon retained moved control pixels: %v at %d,%d", got, x, y)
+				}
+			}
+		}
+	}
 	// A correct footer must not conceal a stale/blank input toolbar after
 	// maximizing. Inspect the already presented native file button as well.
 	var tool point
