@@ -89,7 +89,7 @@ func runComposerDragProfile(t *testing.T, onUI func(func() error) error) error {
 		msg(guiMain, 0x202, 0, position)
 		wanted := composerLayout(guiHeight, lastHeight, len(chatPictures[chatDraftDevice])).TextHeight
 		if currentComposerLayout().TextHeight != wanted {
-			return fmt.Errorf("release did not use latest pointer position")
+			return fmt.Errorf("release did not use latest pointer position: got %d want %d", currentComposerLayout().TextHeight, wanted)
 		}
 		return nil
 	}); err != nil {

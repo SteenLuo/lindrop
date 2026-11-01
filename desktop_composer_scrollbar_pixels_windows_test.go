@@ -131,7 +131,7 @@ func runComposerNativeThumbDrag(onUI func(func() error) error) error {
 	}
 	call(user.NewProc("mouse_event"), 4, 0, 0, 0, 0)
 	time.Sleep(80 * time.Millisecond)
-	return onUI(func() error {
+	err := onUI(func() error {
 		first := int32(msg(guiControls[170], 0xce, 0, 0))
 		if first <= 65535 {
 			return fmt.Errorf("native thumb drag lost 32-bit position: %d", first)
@@ -146,4 +146,9 @@ func runComposerNativeThumbDrag(onUI func(func() error) error) error {
 		call(user.NewProc("SetFocus"), guiMain)
 		return nil
 	})
+	// Drain the disposable desktop's real mouse motion before the following
+	// synthetic splitter profile arms its independent drag state.
+	call(user.NewProc("SetCursorPos"), 0, 0)
+	time.Sleep(150 * time.Millisecond)
+	return err
 }
