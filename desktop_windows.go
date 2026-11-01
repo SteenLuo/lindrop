@@ -575,6 +575,14 @@ func mainProc(hwnd uintptr, message uint32, w, l uintptr) uintptr {
 		items.Height = uint32(sc(height))
 		return 1
 	case 0x113:
+		if w == composerDragTimer {
+			if chatResizeActive {
+				flushComposerResize()
+			} else {
+				cancelComposerResize()
+			}
+			return 0
+		}
 		select {
 		case <-guiNode.stop:
 			destroyWindow.Call(hwnd)
@@ -625,6 +633,7 @@ func mainProc(hwnd uintptr, message uint32, w, l uintptr) uintptr {
 		showWindow.Call(hwnd, 0)
 		return 0
 	case 0x2:
+		cancelComposerResize()
 		closeThemedContextMenu(false)
 		if guiTextWindow != 0 {
 			destroyWindow.Call(guiTextWindow)

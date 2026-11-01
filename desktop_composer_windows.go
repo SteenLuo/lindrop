@@ -178,6 +178,10 @@ func resizeChatComposer(requested int) bool {
 		requested = 64
 	}
 	before := currentComposerLayout()
+	oldY := 0.0
+	if v := chatViews[guiControls[126]]; v != nil {
+		oldY = v.Y
+	}
 	chatComposerHeight = composerLayout(guiHeight, requested, len(chatPictures[chatDraftDevice])).TextHeight
 	after := currentComposerLayout()
 	if before == after {
@@ -199,22 +203,28 @@ func resizeChatComposer(requested int) bool {
 	if after.Top < top {
 		top = after.Top
 	}
-	changed := rct(318, top-5, guiWidth-318, guiHeight-top+5)
-	call(user.NewProc("RedrawWindow"), guiMain, uintptr(unsafe.Pointer(&changed)), 0, 0x1|0x4|0x40|0x100)
+	bottom := before.Top
+	if after.Top > bottom {
+		bottom = after.Top
+	}
+	changed := rct(318, top-5, guiWidth-318, bottom-top+10)
+	call(user.NewProc("RedrawWindow"), guiMain, uintptr(unsafe.Pointer(&changed)), 0, 0x1|0x4|0x40)
 	if guiComposerWindow != 0 {
 		// ERASE is necessary for the native EDIT. WS_EX_COMPOSITED makes
 		// background + descendants appear as a complete frame.
-		call(user.NewProc("RedrawWindow"), guiComposerWindow, 0, 0, 0x1|0x4|0x80|0x100|0x400)
+		call(user.NewProc("RedrawWindow"), guiComposerWindow, 0, 0, 0x1|0x4|0x80|0x400)
 	} else {
 		for _, id := range []int{121, 122, 170, 171} {
 			if h := guiControls[id]; h != 0 {
-				call(user.NewProc("RedrawWindow"), h, 0, 0, 0x1|0x4|0x100|0x400)
+				call(user.NewProc("RedrawWindow"), h, 0, 0, 0x1|0x4|0x400)
 			}
 		}
 	}
-	if v == nil || redraw {
+	// Normal positioning invalidates newly exposed pixels. Repaint the whole
+	// conversation only if clamping changed the scroll offset as it grew.
+	if v == nil || redraw && v.Y != oldY {
 		if h := guiControls[126]; h != 0 {
-			call(user.NewProc("RedrawWindow"), h, 0, 0, 0x1|0x20|0x100|0x400)
+			call(user.NewProc("RedrawWindow"), h, 0, 0, 0x1|0x20|0x400)
 		}
 	}
 	return true
@@ -223,7 +233,7 @@ func resizeChatComposer(requested int) bool {
 func composerMouse(hwnd uintptr, message uint32, w, l uintptr) bool {
 	if guiPage != 0 {
 		if chatResizeActive {
-			chatResizeActive = false
+			finishComposerResize()
 			if call(user.NewProc("GetCapture")) == hwnd {
 				call(user.NewProc("ReleaseCapture"))
 			}
@@ -247,6 +257,7 @@ func composerMouse(hwnd uintptr, message uint32, w, l uintptr) bool {
 		}
 	case 0x201:
 		if x >= 318 && y >= g.Top-4 && y <= g.Top+5 {
+			cancelComposerResize()
 			chatResizeStartY, chatResizeStartHeight = y, g.TextHeight
 			chatResizeActive = true
 			call(user.NewProc("SetCapture"), hwnd)
@@ -269,18 +280,19 @@ func composerMouse(hwnd uintptr, message uint32, w, l uintptr) bool {
 	case 0x200:
 		if chatResizeActive {
 			requested := chatResizeStartHeight + chatResizeStartY - y
-			resizeChatComposer(requested)
+			requestComposerResize(requested)
 			return true
 		}
 	case 0x202:
 		if chatResizeActive {
-			chatResizeActive = false
+			requestComposerResize(chatResizeStartHeight + chatResizeStartY - y)
+			finishComposerResize()
 			call(user.NewProc("ReleaseCapture"))
 			return true
 		}
 	case 0x215, 0x1f: // Lost capture / WM_CANCELMODE.
 		if chatResizeActive {
-			chatResizeActive = false
+			finishComposerResize()
 			if call(user.NewProc("GetCapture")) == hwnd {
 				call(user.NewProc("ReleaseCapture"))
 			}

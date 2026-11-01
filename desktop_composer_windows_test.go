@@ -216,10 +216,12 @@ func TestComposerHiddenEditScrollPasteAndDeviceIsolation(t *testing.T) {
 			t.Fatal("resize did not capture separator")
 		}
 		composerMouse(guiMain, 0x200, 1, coord(700, g.Top-78))
+		flushComposerResize()
 		if currentComposerLayout().TextHeight != g.TextHeight+80 {
 			t.Fatal("drag did not enlarge input")
 		}
 		composerMouse(guiMain, 0x200, 1, coord(700, 1000))
+		flushComposerResize()
 		if currentComposerLayout().TextHeight != 64 {
 			t.Fatal("downward drag did not clamp at minimum")
 		}

@@ -197,19 +197,33 @@ func paintChatViewport(h uintptr, v *chatViewport) {
 		return
 	}
 	v.index()
-	bufferDC(dc, int(r.R), int(r.B), 0, 0, func(mem uintptr) {
-		fill(mem, r, canvas)
+	paintChatViewportRange(dc, v, int(r.R), int(ps.Rect.T), int(ps.Rect.B), int(r.B))
+	v.scrollbar(h)
+}
+
+func paintChatViewportRange(dc uintptr, v *chatViewport, width, top, bottom, clientHeight int) {
+	if top < 0 {
+		top = 0
+	}
+	if bottom > clientHeight {
+		bottom = clientHeight
+	}
+	if bottom <= top || width <= 0 {
+		return
+	}
+	v.index()
+	bufferDC(dc, width, bottom-top, 0, top, func(mem uintptr) {
+		fill(mem, rect{0, 0, int32(width), int32(bottom - top)}, canvas)
 		offset := int(math.Round(v.Y))
-		for i := v.at(offset); i < len(v.Heights) && v.Tops[i]-offset < int(r.B); i++ {
-			y := v.Tops[i] - offset
-			if row := v.raster(mem, i, int(r.R), v.Heights[i]); row != nil {
+		for i := v.at(offset + top); i < len(v.Heights) && v.Tops[i]-offset < bottom; i++ {
+			y := v.Tops[i] - offset - top
+			if row := v.raster(mem, i, width, v.Heights[i]); row != nil {
 				call(gdi.NewProc("BitBlt"), mem, 0, uintptr(y), uintptr(row.W), uintptr(row.H), row.DC, 0, 0, 0xcc0020)
 			} else if i < len(guiTasks) {
-				paintItem(&drawItem{ID: 126, ItemID: uint32(i), DC: mem, Rect: rect{0, int32(y), r.R, int32(y + v.Heights[i])}})
+				paintItem(&drawItem{ID: 126, ItemID: uint32(i), DC: mem, Rect: rect{0, int32(y), int32(width), int32(y + v.Heights[i])}})
 			}
 		}
 	})
-	v.scrollbar(h)
 }
 func (v *chatViewport) choose(h uintptr, index int) {
 	if index < 0 || index >= len(v.Heights) {

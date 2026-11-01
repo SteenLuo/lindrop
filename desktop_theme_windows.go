@@ -456,6 +456,10 @@ func paintMain(hwnd uintptr) {
 	if dc == 0 {
 		return
 	}
+	defer call(user.NewProc("EndPaint"), hwnd, uintptr(unsafe.Pointer(&ps)))
+	if paintComposerDragBackground(dc, ps.Rect) {
+		return
+	}
 	mem := call(gdi.NewProc("CreateCompatibleDC"), dc)
 	bmp := call(gdi.NewProc("CreateCompatibleBitmap"), dc, uintptr(sc(guiWidth)), uintptr(sc(guiHeight)))
 	old := call(gdi.NewProc("SelectObject"), mem, bmp)
@@ -464,7 +468,16 @@ func paintMain(hwnd uintptr) {
 	call(gdi.NewProc("SelectObject"), mem, old)
 	call(gdi.NewProc("DeleteObject"), bmp)
 	call(gdi.NewProc("DeleteDC"), mem)
-	call(user.NewProc("EndPaint"), hwnd, uintptr(unsafe.Pointer(&ps)))
+}
+
+// During splitter motion these exposed gaps contain only the conversation's
+// flat background. Child clipping protects the buffered input and messages.
+func paintComposerDragBackground(dc uintptr, update rect) bool {
+	if !chatResizeActive || guiPage != 0 || len(guiTasks) == 0 || update.L < int32(sc(318)) || update.T < int32(sc(66)) {
+		return false
+	}
+	fill(dc, update, canvas)
+	return true
 }
 func paintScene(dc uintptr) {
 	w, h := guiWidth, guiHeight
