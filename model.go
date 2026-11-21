@@ -423,6 +423,7 @@ func collect(paths []string) ([]Meta, bool, string, error) {
 	var files []Meta
 	folder := len(paths) == 1
 	title := "多个文件"
+	roots := map[string]bool{}
 	for _, p := range paths {
 		st, e := os.Stat(p)
 		if e != nil {
@@ -431,6 +432,22 @@ func collect(paths []string) ([]Meta, bool, string, error) {
 		if len(paths) == 1 {
 			title = st.Name()
 			folder = st.IsDir()
+		}
+		rootName := st.Name()
+		if len(paths) > 1 {
+			rootName, e = safePart(rootName)
+			if e != nil {
+				return nil, false, "", e
+			}
+			base, ext := rootName, ""
+			if !st.IsDir() {
+				ext = filepath.Ext(rootName)
+				base = strings.TrimSuffix(rootName, ext)
+			}
+			for suffix := 2; roots[strings.ToLower(rootName)]; suffix++ {
+				rootName = fmt.Sprintf("%s (%d)%s", base, suffix, ext)
+			}
+			roots[strings.ToLower(rootName)] = true
 		}
 		if st.IsDir() {
 			e = filepath.Walk(p, func(path string, info os.FileInfo, err error) error {
@@ -450,6 +467,9 @@ func collect(paths []string) ([]Meta, bool, string, error) {
 				if e != nil {
 					return e
 				}
+				if len(paths) > 1 {
+					rel = filepath.Join(rootName, rel)
+				}
 				files = append(files, Meta{Rel: filepath.ToSlash(rel), Source: path, Size: info.Size(), Mod: info.ModTime().UnixNano()})
 				if len(files) > 5000 {
 					return errors.New("一次最多 5000 个文件")
@@ -460,13 +480,16 @@ func collect(paths []string) ([]Meta, bool, string, error) {
 				return nil, false, "", e
 			}
 		} else if st.Mode().IsRegular() {
-			files = append(files, Meta{Rel: st.Name(), Source: p, Size: st.Size(), Mod: st.ModTime().UnixNano()})
+			files = append(files, Meta{Rel: rootName, Source: p, Size: st.Size(), Mod: st.ModTime().UnixNano()})
 		} else {
 			return nil, false, "", errors.New("仅支持普通文件与文件夹")
 		}
 	}
 	if len(files) == 0 {
 		return nil, false, "", errors.New("没有可传输的文件（空文件夹暂不传输）")
+	}
+	if len(files) > 5000 {
+		return nil, false, "", errors.New("一次最多 5000 个文件")
 	}
 	for _, f := range files {
 		if f.Size > maxFileSize {

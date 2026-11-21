@@ -586,20 +586,28 @@ func (n *Node) webAPI(w http.ResponseWriter, r *http.Request, admin bool, c WebC
 			apiError(w, 413, e)
 			return
 		}
-		var ack struct {
-			Offset int64 `json:"offset"`
-		}
+		var ack ChunkReply
 		if e = n.Call(target, "chunk", Chunk{id, index, offset, data}, &ack); e != nil {
 			apiError(w, 400, e)
 			return
 		}
+		if ack.Status == "rejected" {
+			if target != n.id {
+				n.setTask(id, "rejected", "对方已拒绝接收")
+				n.persist()
+			}
+			apiError(w, 400, "对方已拒绝接收")
+			return
+		}
 		if target != n.id {
 			n.mu.Lock()
-			if index >= 0 && index < len(t.Files) {
+			if t.Status != "rejected" && index >= 0 && index < len(t.Files) {
 				t.Done += ack.Offset - t.Files[index].Offset
 				t.Files[index].Offset = ack.Offset
 			}
-			t.Status = "sending"
+			if t.Status != "rejected" {
+				t.Status = "sending"
+			}
 			n.mu.Unlock()
 		}
 		jsonOut(w, ack)
@@ -625,6 +633,14 @@ func (n *Node) webAPI(w http.ResponseWriter, r *http.Request, admin bool, c WebC
 		var reply TaskReply
 		if e := n.Call(target, "finish", struct{ ID string }{v.ID}, &reply); e != nil {
 			apiError(w, 400, e)
+			return
+		}
+		if reply.Status == "rejected" {
+			if target != n.id {
+				n.setTask(v.ID, "rejected", "对方已拒绝接收")
+				n.persist()
+			}
+			apiError(w, 400, "对方已拒绝接收")
 			return
 		}
 		n.mu.Lock()

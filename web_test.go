@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"strings"
@@ -23,6 +24,56 @@ func browser(t *testing.T, n *Node, name string) *http.Client {
 		t.Fatal(r.Status)
 	}
 	return c
+}
+
+func TestPhoneUploadReceivesExplicitRefusal(t *testing.T) {
+	n := isolatedTransferNode(t, "phone-entry")
+	client := browser(t, n, "测试手机")
+	base := "http://" + n.addr
+	data := []byte("手机上传的文件内容")
+	request, _ := json.Marshal(map[string]interface{}{"target": n.id, "offer": Offer{Title: "phone.bin", Files: []Meta{{Rel: "phone.bin", Size: int64(len(data)), SHA: hashBytes(data)}}}})
+	response, err := client.Post(base+"/api/task/offer", "application/json", bytes.NewReader(request))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		ID    string
+		Reply TaskReply
+	}
+	if err = json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != 200 || result.Reply.Status != "waiting" {
+		t.Fatal("phone offer", response.Status, result)
+	}
+	if err = n.Accept(result.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if err = n.TaskAction(result.ID, "reject"); err != nil {
+		t.Fatal(err)
+	}
+	upload, err := http.NewRequest("POST", base+"/api/task/chunk?id="+result.ID+"&index=0&offset=0", bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	upload.Header.Set("X-LinNode-Upload", "1")
+	upload.Header.Set("Content-Type", "application/octet-stream")
+	response, err = client.Do(upload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(response.Body)
+	response.Body.Close()
+	if response.StatusCode != 400 || !bytes.Contains(body, []byte("对方已拒绝接收")) {
+		t.Fatal("phone refusal feedback", response.Status, string(body))
+	}
+	n.mu.Lock()
+	v := *n.cfg.Tasks[result.ID]
+	n.mu.Unlock()
+	if v.Status != "rejected" || v.Error != "" {
+		t.Fatal("phone upload overwrote receiver refusal", v.Status, v.Error)
+	}
 }
 func TestWebAuthority(t *testing.T) {
 	n := testNode(t, "入口")

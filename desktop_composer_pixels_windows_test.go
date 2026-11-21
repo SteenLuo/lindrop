@@ -184,6 +184,7 @@ func TestDesktopComposerPresentedPixelFrames(t *testing.T) {
 		return map[string]interface{}{"saveDir": n.cfg.SaveDir, "devices": []Device{{ID: "sample-peer", Name: "示例设备", Online: sampleOnline}}, "tasks": []Task{
 			{ID: "sample-file", Title: "示例文档.txt", Direction: "in", Sender: "sample-peer", Target: n.id, Status: "done", Total: 1024, Done: 1024, Created: 1},
 			{ID: "sample-text", Kind: "text", Direction: "out", Sender: n.id, Target: "sample-peer", Status: "done", Created: 2},
+			{ID: "sample-receiving", Title: "正在接收的文件.zip", Direction: "in", Sender: "sample-peer", Target: n.id, Status: "receiving", Total: 2048, Done: 1024, Created: 3},
 		}}
 	}
 	result := make(chan error, 1)
@@ -217,6 +218,42 @@ func TestDesktopComposerPresentedPixelFrames(t *testing.T) {
 			chatResizeActive = true
 			call(user.NewProc("RedrawWindow"), guiMain, 0, 0, 0x1|0x4|0x80|0x100|0x400)
 			return nil
+		})
+		if failure != nil {
+			result <- failure
+			return
+		}
+		failure = onUI(func() error {
+			for i, task := range guiTasks {
+				if task.ID == "sample-text" {
+					msg(guiControls[126], 0x186, uintptr(i), 0)
+					break
+				}
+			}
+			call(user.NewProc("ValidateRect"), guiComposerFooter, 0)
+			doCommand(172, 0)
+			if chatFeedback != "已复制文字" || call(user.NewProc("GetUpdateRect"), guiComposerFooter, 0, 0) == 0 {
+				return fmt.Errorf("copy action did not invalidate its visible feedback footer")
+			}
+			msg(guiControls[170], 0x302, 0, 0)
+			if text(guiControls[170]) != chatTextCache["sample-text"] {
+				return fmt.Errorf("copy reported success but native paste did not match")
+			}
+			set(guiControls[170], "")
+			call(user.NewProc("SetFocus"), guiMain)
+			return nil
+		})
+		if failure != nil {
+			result <- failure
+			return
+		}
+		time.Sleep(60 * time.Millisecond)
+		failure = onUI(func() error {
+			frame, err := captureComposerFrame()
+			if err != nil {
+				return err
+			}
+			return saveComposerEvidence(frame, "copy-feedback")
 		})
 		if failure != nil {
 			result <- failure

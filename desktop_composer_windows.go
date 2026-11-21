@@ -37,6 +37,15 @@ func composerFeedback(s string) {
 	invalidate(guiComposerFooter)
 }
 
+func reportCopyResult(kind string, err error) {
+	if err != nil {
+		composerFeedback("复制失败：" + err.Error())
+		return
+	}
+	chatFeedback, chatFeedbackUntil = "已复制"+kind, time.Now().Add(3*time.Second)
+	invalidate(guiComposerFooter)
+}
+
 func pasteChatScreenshot() bool {
 	shot, available, err := chatReadScreenshot(guiMain)
 	if !available {

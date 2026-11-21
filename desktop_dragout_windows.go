@@ -9,7 +9,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
-	"time"
 	"unicode/utf16"
 	"unsafe"
 )
@@ -243,13 +242,7 @@ func copyChatFiles(id string) {
 	if e == nil {
 		e = copyDesktopFiles(paths)
 	}
-	if e != nil {
-		showError(e.Error())
-		return
-	}
-	chatFeedback = "已复制文件，可到文件夹或聊天窗口粘贴"
-	chatFeedbackUntil = time.Now().Add(3 * time.Second)
-	invalidate(guiMain)
+	reportCopyResult("文件，可直接粘贴", e)
 }
 func copyDesktopFiles(paths []string) error {
 	raw, e := fileDropBytes(paths)

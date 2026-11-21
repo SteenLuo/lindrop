@@ -105,6 +105,9 @@ func taskContextMenu(hwnd uintptr) {
 	if !locationAdded && t.Kind != "text" && (t.Direction == "out" || t.Direction == "in" && t.Status == "done") {
 		items = append(items, contextMenuItem{153, "打开所在文件夹", ""})
 	}
+	if canRejectTask(t) && t.Status != "waiting" {
+		items = append(items, contextMenuItem{129, "拒绝接收", ""})
+	}
 	var p point
 	call(user.NewProc("GetCursorPos"), uintptr(unsafe.Pointer(&p)))
 	if guiKeyboardMode {

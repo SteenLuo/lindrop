@@ -62,6 +62,24 @@ func TestDesktopUnicodeDropAndDirectory(t *testing.T) {
 	}
 }
 
+func TestDesktopMultiFolderDropPreservesDistinctRoots(t *testing.T) {
+	paths, expected := folderBatchFixture(t)
+	got, err := desktopDropPaths(dropPayload(t, paths))
+	if err != nil || !reflect.DeepEqual(got, paths) {
+		t.Fatal("native drop lost folder paths", got, err)
+	}
+	files, _, _, err := collect(got)
+	if err != nil || len(files) != len(expected) {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		body, err := os.ReadFile(f.Source)
+		if err != nil || string(body) != expected[f.Rel] {
+			t.Fatal("drag manifest lost roots", f.Rel, err)
+		}
+	}
+}
+
 func TestDesktopSendTargetAndLongText(t *testing.T) {
 	for _, d := range []Device{{}, {ID: "self", Online: true}, {ID: "other", Online: false}} {
 		if desktopSendTarget(d, true, "self") == nil {

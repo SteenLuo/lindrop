@@ -28,6 +28,10 @@ type TaskReply struct {
 	Offsets []int64 `json:"offsets"`
 	Error   string  `json:"error"`
 }
+type ChunkReply struct {
+	Offset int64  `json:"offset"`
+	Status string `json:"status,omitempty"`
+}
 type Chunk struct {
 	ID     string `json:"id"`
 	Index  int    `json:"index"`
@@ -379,6 +383,10 @@ func (n *Node) chunkWithLimit(owner string, v Chunk, limit int) (json.RawMessage
 		return nil, errors.New("任务不存在或无权写入")
 	}
 	if t.Status != "receiving" {
+		if t.Status == "rejected" {
+			n.mu.Unlock()
+			return marshal(ChunkReply{Status: "rejected"})
+		}
 		n.mu.Unlock()
 		return nil, errors.New("接收任务尚未允许或已结束")
 	}
@@ -446,6 +454,11 @@ func (n *Node) finishWithHashes(owner, id string, hashes []string) (result json.
 		return nil, errors.New("任务不存在或无权完成")
 	}
 	if t.Status == "done" {
+		reply := n.replyLocked(t)
+		n.mu.Unlock()
+		return marshal(reply)
+	}
+	if t.Status == "rejected" {
 		reply := n.replyLocked(t)
 		n.mu.Unlock()
 		return marshal(reply)
@@ -606,7 +619,7 @@ func (n *Node) sendFiles(paths []string, target, kind string) (string, error) {
 }
 func (n *Node) setTask(id, status, msg string) {
 	n.mu.Lock()
-	if t := n.cfg.Tasks[id]; t != nil {
+	if t := n.cfg.Tasks[id]; t != nil && (t.Status != "rejected" || status == "rejected") {
 		t.Status = status
 		t.Error = msg
 		t.Rate = 0
@@ -677,7 +690,7 @@ func (n *Node) sendTask(id string) error {
 	}
 	if reply.Status == "rejected" {
 		n.setTask(id, "rejected", "对方已拒绝")
-		return nil
+		return n.persist()
 	}
 	if reply.Status == "done" {
 		n.mu.Lock()
@@ -761,9 +774,7 @@ func (n *Node) sendTask(id string) error {
 				digestDone = make(chan struct{})
 				go func(block []byte) { digest.Write(block); close(digestDone) }(data)
 			}
-			var ack struct {
-				Offset int64 `json:"offset"`
-			}
+			var ack ChunkReply
 			if fast {
 				e = n.sendBinaryChunk(target, Chunk{id, i, offset, data}, &ack)
 			} else {
@@ -775,6 +786,11 @@ func (n *Node) sendTask(id string) error {
 			if e != nil {
 				src.Close()
 				return e
+			}
+			if ack.Status == "rejected" {
+				src.Close()
+				n.setTask(id, "rejected", "对方已拒绝接收")
+				return n.persist()
 			}
 			if ack.Offset <= offset || ack.Offset > f.Size {
 				src.Close()
@@ -821,6 +837,10 @@ func (n *Node) sendTask(id string) error {
 	if e := n.Call(target, "finish", FinishRequest{ID: id, Hashes: hashes}, &reply); e != nil {
 		return e
 	}
+	if reply.Status == "rejected" {
+		n.setTask(id, "rejected", "对方已拒绝接收")
+		return n.persist()
+	}
 	n.mu.Lock()
 	t.Status = "done"
 	t.Done = t.Total
@@ -866,6 +886,9 @@ func (n *Node) kick() {
 	n.mu.Unlock()
 }
 func (n *Node) TaskAction(id, action string) error {
+	if action == "reject" {
+		return n.rejectTask(id)
+	}
 	n.mu.Lock()
 	t := n.cfg.Tasks[id]
 	if t == nil {
@@ -880,12 +903,6 @@ func (n *Node) TaskAction(id, action string) error {
 	case "accept", "trust":
 		n.mu.Unlock()
 		return n.Accept(id, action == "trust")
-	case "reject":
-		if t.Status != "waiting" {
-			n.mu.Unlock()
-			return errors.New("只能拒绝尚未接收的任务")
-		}
-		t.Status = "rejected"
 	case "pause":
 		if t.Status == "verifying" {
 			n.mu.Unlock()
@@ -980,6 +997,10 @@ func (n *Node) Pull(target, shareID string) (string, error) {
 func (n *Node) pullTask(id string) error {
 	n.mu.Lock()
 	t := n.cfg.Tasks[id]
+	if t.Status == "rejected" || t.Manual {
+		n.mu.Unlock()
+		return nil
+	}
 	files := append([]Meta{}, t.Files...)
 	target, shareID := t.Target, t.ShareID
 	if t.Status == "paused" || t.Status == "queued" {
@@ -1009,12 +1030,13 @@ func (n *Node) pullTask(id string) error {
 			if e != nil {
 				return e
 			}
-			var ack struct {
-				Offset int64 `json:"offset"`
-			}
+			var ack ChunkReply
 			json.Unmarshal(raw, &ack)
+			if ack.Status == "rejected" {
+				return nil
+			}
 			n.mu.Lock()
-			t.Rate = float64(ack.Offset-offset) / time.Since(start).Seconds()
+			if t.Status == "receiving" { t.Rate = float64(ack.Offset-offset) / time.Since(start).Seconds() }
 			n.mu.Unlock()
 			offset = ack.Offset
 		}

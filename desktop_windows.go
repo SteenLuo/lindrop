@@ -409,14 +409,7 @@ func doCommand(id, notification int) {
 				copyChatFiles(t.ID)
 				return
 			}
-			if e := copyDesktopText(selectedChatText(t)); e != nil {
-				showError(e.Error())
-			} else {
-				set(guiControls[190], "已复制文字")
-				chatFeedback = "已复制文字"
-				chatFeedbackUntil = time.Now().Add(3 * time.Second)
-				invalidate(guiMain)
-			}
+			reportCopyResult("文字", copyDesktopText(selectedChatText(t)))
 		}
 	case 159:
 		showTextComposer()

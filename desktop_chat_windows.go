@@ -486,7 +486,7 @@ func chatSecondaryRect(t Task, b chatBubble) rect {
 	if b.Text {
 		return rct(b.X+12, b.Y+b.H-27, 86, 24)
 	}
-	return rct(b.X+102, b.Y+b.H-31, 50, 23)
+	return rct(b.X+102, b.Y+b.H-31, 72, 23)
 }
 func chatCopyVisible(t Task) bool {
 	return chatHoverID == t.ID || guiKeyboardMode && call(user.NewProc("GetFocus")) == guiControls[126] && func() bool { v, ok := currentTask(); return ok && v.ID == t.ID }()
@@ -603,8 +603,10 @@ func paintChatItem(dc uintptr, t Task, x, y, width, index int) {
 			label(dc, action, b.X+16, b.Y+b.H-30, 80, 20, accent, guiSmall)
 		}
 	}
-	if t.Status == "waiting" {
-		label(dc, "拒绝", b.X+104, b.Y+b.H-30, 64, 20, muted, guiSmall)
+	if canRejectTask(t) {
+		r := chatSecondaryRect(t, b)
+		rounded(dc, r, paper, lineColor, 6)
+		centerText(dc, "拒绝接收", r, warning, guiSmall)
 	}
 	status := taskStatus(t)
 	if t.Status == "done" {
@@ -661,7 +663,7 @@ func chatHitPart(t Task, width, x, y int, part *chatTextPart) int {
 		id, _ := taskAction(t)
 		return id
 	}
-	if t.Status == "waiting" && inside(chatSecondaryRect(t, b)) {
+	if canRejectTask(t) && inside(chatSecondaryRect(t, b)) {
 		return 129
 	}
 	return 0
@@ -916,8 +918,13 @@ func paintComposerFooterOffset(dc uintptr, dx, dy int) {
 	x, w, top := 318+dx, guiWidth-318, currentComposerLayout().FooterTop+dy
 	fill(dc, rct(x, top, w, composerFooterHeight), paper)
 	hint := "Enter 换行 · Ctrl + Enter 发送 · Ctrl + V 粘贴截图"
+	clr, font := muted, guiTiny
 	if time.Now().Before(chatFeedbackUntil) {
 		hint = chatFeedback
+		clr, font = accent, guiSmall
+		if strings.HasPrefix(hint, "复制失败") {
+			clr = warning
+		}
 	}
-	label(dc, hint, x+24, top+11, w-156, 24, muted, guiTiny)
+	label(dc, hint, x+24, top+11, w-156, 24, clr, font)
 }

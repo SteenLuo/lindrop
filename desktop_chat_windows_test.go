@@ -54,6 +54,26 @@ func TestChatWrappingAndActionGeometry(t *testing.T) {
 	}
 }
 
+func TestRejectHitInAllIncomingFileStates(t *testing.T) {
+	old := guiScale
+	defer func() { guiScale = old }()
+	for _, scale := range []float64{1, 1.25, 1.5, 2} {
+		guiScale = scale
+		for _, status := range []string{"waiting", "receiving", "paused", "queued", "verifying", "done", "rejected"} {
+			task := Task{ID: "refuse", Direction: "in", Status: status, Title: "来件.zip"}
+			b := chatBubbleLayout(task, 700)
+			r := chatSecondaryRect(task, b)
+			want := 0
+			if status == "waiting" || status == "receiving" || status == "paused" || status == "queued" {
+				want = 129
+			}
+			if got := chatHit(task, 700, int(r.L)+2, int(r.T)+2); got != want {
+				t.Fatal("reject action inaccessible", scale, status, got, want)
+			}
+		}
+	}
+}
+
 func TestExpandedChatPreservesFullTextInBoundedRows(t *testing.T) {
 	body := strings.Repeat("展开的中文与emoji😀，每一行都保留。\n", 600) + "最后一行"
 	task := Task{ID: "full-expansion", Kind: "text", Direction: "in", Status: "done"}
